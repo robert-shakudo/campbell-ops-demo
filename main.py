@@ -43,7 +43,10 @@ ANTHROPIC_KEY = os.getenv(
     "",
 )
 CLICKUP_LIST_ID = os.getenv("CLICKUP_LIST_ID", "901320600795")
-CLICKUP_TOKEN = os.getenv("CLICKUP_TOKEN", "")
+CLICKUP_TOKEN = os.getenv(
+    "CLICKUP_TOKEN", "pk_150142682_TO57FJP04N2FUC2QSTYA28PBZL8QGN3V"
+)
+DEMO_URL = os.getenv("DEMO_URL", "https://campbell-ops-demo.dev.hyperplane.dev")
 N8N_KEY = os.getenv(
     "N8N_API_KEY",
     "",
@@ -1439,7 +1442,7 @@ async def list_incidents():
 
 
 @app.post("/api/incidents/{incident_id}/diagnose")
-async def diagnose_incident(incident_id: str):
+async def diagnose_incident(incident_id: str, bg: BackgroundTasks):
     row = db_execute(
         "SELECT * FROM campbell_incidents WHERE id=%s", [incident_id], fetch=True
     )
@@ -1447,11 +1450,121 @@ async def diagnose_incident(incident_id: str):
         raise HTTPException(404, "Incident not found")
     inc = dict(row[0])
     service = inc["service"]
+    if inc.get("status") not in ("open",):
+        return {"status": inc.get("status"), "message": "Already processed"}
+    bg.add_task(simulate_diagnosis_flow, incident_id, service)
+    return {"status": "diagnosis_started", "incident_id": incident_id}
+
+
+async def simulate_diagnosis_flow(incident_id: str, service: str):
     cfg = SERVICES_CONFIG.get(service, {})
+
+    def emit_step(step: str, tool: str = ""):
+        asyncio.create_task(
+            broadcast(
+                "diagnosis_step",
+                {"incident_id": incident_id, "step": step, "tool": tool},
+            )
+        )
+
+    await asyncio.sleep(0.5)
+    emit_step(f"📋 Reading {cfg.get('display', service)} error logs...", "read_logs")
+    db_execute(
+        "INSERT INTO campbell_kaji_activity(tool, params, summary) VALUES(%s,%s,%s)",
+        [
+            "read_logs",
+            json.dumps({"service": service}),
+            f"Reading {service} logs — confirming error",
+        ],
+    )
+    await broadcast(
+        "kaji_activity",
+        {
+            "tool": "read_logs",
+            "summary": f"Confirmed: {cfg.get('error', '')[:80]}",
+            "params": {"service": service},
+        },
+    )
+    await asyncio.sleep(1.5)
+
+    emit_step(f"🔍 Searching Confluence: '{service} runbook'...", "search_confluence")
+    conf_page = cfg.get("confluence_page", "")
+    conf_title = CONFLUENCE_PAGES.get(conf_page, {}).get("title", conf_page)
+    db_execute(
+        "INSERT INTO campbell_kaji_activity(tool, params, summary) VALUES(%s,%s,%s)",
+        [
+            "search_confluence",
+            json.dumps({"query": f"{service} runbook"}),
+            f"Searching Confluence: '{service} runbook'",
+        ],
+    )
+    await broadcast(
+        "kaji_activity",
+        {
+            "tool": "search_confluence",
+            "summary": f"Found: {conf_title}",
+            "params": {"q": f"{service} runbook"},
+        },
+    )
+    await asyncio.sleep(1.5)
+
+    if conf_page:
+        emit_step(f"📚 Reading '{conf_title}'...", "read_confluence_page")
+        await broadcast(
+            "kb_hit",
+            {
+                "page_id": conf_page,
+                "title": conf_title,
+                "space": CONFLUENCE_PAGES.get(conf_page, {}).get("space", "OPS"),
+            },
+        )
+        await broadcast(
+            "kaji_activity",
+            {"tool": "read_confluence_page", "summary": f"Read: {conf_title}"},
+        )
+        await asyncio.sleep(1.5)
+
+    hist = cfg.get("historical_incident", "")
+    if hist:
+        emit_step(
+            f"🕰 Cross-referencing incident history: {hist}...",
+            "search_incident_history",
+        )
+        await broadcast("incident_history_hit", {"results": [hist], "query": service})
+        await broadcast(
+            "kaji_activity",
+            {
+                "tool": "search_incident_history",
+                "summary": f"Found: {hist} — identical issue, {next((i.get('time_to_fix_minutes') for i in HISTORICAL_INCIDENTS if i.get('id') == hist), '?')} min fix",
+            },
+        )
+        await asyncio.sleep(1.5)
+
+    emit_step(
+        f"📝 Reading source: {cfg.get('source_file', '')}:{cfg.get('source_line', '')}...",
+        "read_source_file",
+    )
+    await broadcast(
+        "kaji_activity",
+        {
+            "tool": "read_source_file",
+            "summary": f"Read {cfg.get('source_file', '')}:{cfg.get('source_line', '')} — found the failing accessor",
+        },
+    )
+    await asyncio.sleep(1.2)
+
+    emit_step("🧠 Generating fix patch...", "generate_patch")
+    await broadcast(
+        "kaji_activity",
+        {
+            "tool": "generate_patch",
+            "summary": f"Patch generated for {cfg.get('fix_file', '')}",
+        },
+    )
+    await asyncio.sleep(1)
 
     diagnosis = cfg.get("root_cause", "Unknown root cause")
     diff = cfg.get("fix_diff", "")
-
     db_execute(
         "UPDATE campbell_incidents SET status='diagnosed', diagnosis=%s, code_diff=%s, updated_at=NOW() WHERE id=%s",
         [diagnosis, diff, incident_id],
@@ -1463,20 +1576,15 @@ async def diagnose_incident(incident_id: str):
             "service": service,
             "diagnosis": diagnosis,
             "code_diff": diff,
-            "confluence_page": cfg.get("confluence_page"),
-            "historical_incident": cfg.get("historical_incident"),
+            "confluence_page": conf_page,
+            "historical_incident": hist,
         },
     )
-
-    # Log kaji diagnosis activity
+    emit_step("✅ Diagnosis complete — ready for human review", "complete")
     await broadcast(
         "kaji_activity",
-        {
-            "tool": "diagnose_incident",
-            "summary": f"Diagnosed {service}: {diagnosis[:100]}",
-        },
+        {"tool": "diagnose_complete", "summary": f"{service}: {diagnosis[:100]}"},
     )
-    return {"status": "diagnosed", "diagnosis": diagnosis, "code_diff": diff}
 
 
 @app.post("/api/incidents/{incident_id}/apply-fix")
@@ -1494,6 +1602,205 @@ async def apply_fix(incident_id: str, bg: BackgroundTasks):
     return {"status": "fix_started", "incident_id": incident_id}
 
 
+@app.post("/api/incidents/{incident_id}/request-review")
+async def request_review(incident_id: str):
+    row = db_execute(
+        "SELECT * FROM campbell_incidents WHERE id=%s", [incident_id], fetch=True
+    )
+    if not row:
+        raise HTTPException(404, "Incident not found")
+    inc = dict(row[0])
+    service = inc["service"]
+    cfg = SERVICES_CONFIG.get(service, {})
+    approve_url = f"{DEMO_URL}/api/webhooks/approve/{incident_id}"
+    reject_url = f"{DEMO_URL}/api/webhooks/reject/{incident_id}"
+    diff_text = cfg.get("fix_diff", "no diff available")
+    msg_payload: Dict[str, Any] = {
+        "channel_id": MM_CHANNEL_ID,
+        "message": f"🔍 **Code Review Required** — {cfg.get('display', service)}",
+        "props": {
+            "attachments": [
+                {
+                    "color": "#C9A84C",
+                    "fallback": f"Code review required for {service} incident",
+                    "fields": [
+                        {
+                            "title": "Service",
+                            "value": cfg.get("display", service),
+                            "short": True,
+                        },
+                        {
+                            "title": "File:Line",
+                            "value": f"`{cfg.get('source_file', '')}:{cfg.get('source_line', '')}`",
+                            "short": True,
+                        },
+                        {
+                            "title": "Error",
+                            "value": f"`{cfg.get('error', '')[:80]}`",
+                            "short": False,
+                        },
+                        {
+                            "title": "Root Cause",
+                            "value": cfg.get("root_cause", "")[:200],
+                            "short": False,
+                        },
+                        {
+                            "title": "Risk Level",
+                            "value": "⚠️ **High** — Production trading infrastructure",
+                            "short": True,
+                        },
+                        {
+                            "title": "Ref",
+                            "value": cfg.get("historical_incident", "N/A"),
+                            "short": True,
+                        },
+                        {
+                            "title": "Proposed Patch",
+                            "value": f"```diff\n{diff_text}\n```",
+                            "short": False,
+                        },
+                        {
+                            "title": "Business Impact",
+                            "value": f"💰 **${cfg.get('impact', 0):,}** at risk",
+                            "short": True,
+                        },
+                    ],
+                    "actions": [
+                        {
+                            "id": "approve",
+                            "name": "✅ Approve & Apply",
+                            "integration": {
+                                "url": approve_url,
+                                "context": {
+                                    "incident_id": incident_id,
+                                    "action": "approve",
+                                    "service": service,
+                                },
+                            },
+                        },
+                        {
+                            "id": "reject",
+                            "name": "❌ Reject — Retry",
+                            "integration": {
+                                "url": reject_url,
+                                "context": {
+                                    "incident_id": incident_id,
+                                    "action": "reject",
+                                    "service": service,
+                                },
+                            },
+                        },
+                    ],
+                }
+            ]
+        },
+    }
+    post_id = None
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            r = await client.post(
+                f"{MM_URL}/api/v4/posts",
+                headers={"Authorization": f"Bearer {MM_TOKEN}"},
+                json=msg_payload,
+            )
+            if r.status_code == 201:
+                post_id = r.json().get("id")
+    except Exception as e:
+        log.warning(f"Review request MM post failed: {e}")
+    db_execute(
+        "INSERT INTO campbell_kaji_activity(tool, params, summary) VALUES(%s,%s,%s)",
+        [
+            "request_human_review",
+            json.dumps({"service": service, "incident_id": incident_id}),
+            f"Code review sent to #campbell-ops-alerts — awaiting approval from ops team",
+        ],
+    )
+    await broadcast(
+        "kaji_activity",
+        {
+            "tool": "request_human_review",
+            "summary": f"Code review pending: {cfg.get('display', service)} — waiting for ops team sign-off",
+        },
+    )
+    await broadcast("incident_update", {"id": incident_id, "status": "review_pending"})
+    db_execute(
+        "UPDATE campbell_incidents SET status='review_pending', updated_at=NOW() WHERE id=%s",
+        [incident_id],
+    )
+    return {"status": "review_requested", "mattermost_post": post_id}
+
+
+@app.post("/api/webhooks/approve/{incident_id}")
+async def webhook_approve(incident_id: str, request: Request, bg: BackgroundTasks):
+    try:
+        body = await request.json()
+        user_name = body.get("user_name", "ops-team")
+        user_id = body.get("user_id", "")
+    except Exception:
+        user_name = "ops-team"
+        user_id = ""
+    row = db_execute(
+        "SELECT * FROM campbell_incidents WHERE id=%s", [incident_id], fetch=True
+    )
+    if not row:
+        return JSONResponse({"ephemeral_text": "Incident not found"})
+    inc = dict(row[0])
+    service = inc["service"]
+    cfg = SERVICES_CONFIG.get(service, {})
+    commit = cfg.get("commit_hash", "auto")
+    await post_mattermost(
+        f"✅ **Fix approved by @{user_name}**\n"
+        f"Applying to `{cfg.get('fix_file', '')}` — commit `{commit}` → build starting...\n"
+        f'_"Detected, diagnosed, fixed, CI verified. One button. The engineer didn\'t write a line of code."_'
+    )
+    bg.add_task(simulate_fix_flow, incident_id, service)
+    return JSONResponse(
+        {
+            "ephemeral_text": f"✅ Approved! Fix is being applied. Check #campbell-ops-alerts for build status."
+        }
+    )
+
+
+@app.post("/api/webhooks/reject/{incident_id}")
+async def webhook_reject(incident_id: str, request: Request):
+    try:
+        body = await request.json()
+        user_name = body.get("user_name", "ops-team")
+    except Exception:
+        user_name = "ops-team"
+    row = db_execute(
+        "SELECT * FROM campbell_incidents WHERE id=%s", [incident_id], fetch=True
+    )
+    if row:
+        db_execute(
+            "UPDATE campbell_incidents SET status='diagnosed', updated_at=NOW() WHERE id=%s",
+            [incident_id],
+        )
+    await post_mattermost(
+        f"❌ **Fix rejected by @{user_name}**\n"
+        f"@kaji — please suggest an alternative approach for this incident."
+    )
+    await broadcast("incident_update", {"id": incident_id, "status": "diagnosed"})
+    db_execute(
+        "INSERT INTO campbell_kaji_activity(tool, params, summary) VALUES(%s,%s,%s)",
+        [
+            "fix_rejected",
+            json.dumps({"incident_id": incident_id}),
+            f"Fix rejected by {user_name} — rediagnosing",
+        ],
+    )
+    await broadcast(
+        "kaji_activity",
+        {
+            "tool": "fix_rejected",
+            "summary": f"Fix rejected by {user_name} — will retry with alternative approach",
+        },
+    )
+    return JSONResponse(
+        {"ephemeral_text": "Fix rejected. Kaji will retry with a different approach."}
+    )
+
+
 @app.post("/api/incidents/{incident_id}/create-ticket")
 async def create_ticket(incident_id: str, req: TicketRequest):
     row = db_execute(
@@ -1507,7 +1814,21 @@ async def create_ticket(incident_id: str, req: TicketRequest):
 
     # Create real ClickUp ticket
     ticket_url = None
-    ticket_name = f"{cfg.get('display', '')}: {cfg.get('error', '')[:60]}"
+    assignee = req.assignee if req and req.assignee else "Jimmy Chen"
+    ticket_name = f"🚨 [{cfg.get('display', service)}] {cfg.get('error', '')[:60]}"
+    md_desc = (
+        f"## Campbell Ops Co-Pilot — Auto-Generated Incident\n\n"
+        f"**Service**: {cfg.get('display', service)}  \n"
+        f"**Error**: `{cfg.get('error', '')}`  \n"
+        f"**File**: `{cfg.get('source_file', '')}:{cfg.get('source_line', '')}`  \n"
+        f"**Root Cause**: {cfg.get('root_cause', '')}  \n"
+        f"**Business Impact**: ${cfg.get('impact', 0):,} at risk  \n"
+        f"**Historical Ref**: {cfg.get('historical_incident', 'N/A')}  \n\n"
+        f"### Kaji Fix\n```diff\n{cfg.get('fix_diff', '')}\n```\n\n"
+        f"**Commit**: `{cfg.get('commit_hash', '')}`  \n"
+        f"**Build**: `{cfg.get('build_name', '')}` — PASSED ✓  \n\n"
+        f"*Created automatically by Kaji via [Campbell Ops Co-Pilot]({DEMO_URL})*"
+    )
     try:
         async with httpx.AsyncClient(timeout=15) as client:
             r = await client.post(
@@ -1518,26 +1839,23 @@ async def create_ticket(incident_id: str, req: TicketRequest):
                 },
                 json={
                     "name": ticket_name,
-                    "description": (
-                        f"**Service**: {cfg.get('display', '')}\n"
-                        f"**Error**: {cfg.get('error', '')}\n"
-                        f"**Root Cause**: {cfg.get('root_cause', '')}\n"
-                        f"**Incident ID**: {incident_id}\n"
-                        f"**Business Impact**: ${cfg.get('impact', 0):,}"
-                    ),
-                    "priority": 1,
+                    "markdown_description": md_desc,
+                    "priority": 2,
                     "status": "to do",
+                    "tags": ["campbell-ops", "kaji", service],
                 },
             )
-            if r.status_code == 200:
+            if r.status_code in (200, 201):
                 data = r.json()
                 ticket_url = (
                     data.get("url") or f"https://app.clickup.com/t/{data.get('id')}"
                 )
+                log.info(f"ClickUp ticket created: {ticket_url}")
     except Exception as e:
         log.warning(f"ClickUp ticket creation failed: {e}")
-        # Mock ticket for demo
-        ticket_url = f"https://app.clickup.com/t/campbell-{incident_id[:8]}"
+
+    if not ticket_url:
+        ticket_url = f"https://app.clickup.com/90131266176/v/l/901320600795"
 
     if ticket_url:
         db_execute(
@@ -1673,6 +1991,131 @@ async def demo_reset():
     db_execute("DELETE FROM campbell_kaji_activity")
     await broadcast("demo_reset", {"ts": datetime.utcnow().isoformat()})
     return {"status": "reset"}
+
+
+@app.post("/api/demo/simulate-random")
+async def simulate_random(bg: BackgroundTasks):
+    healthy = [svc for svc, f in service_failures.items() if f is None]
+    if not healthy:
+        return {
+            "status": "all_failing",
+            "message": "All services already have active failures",
+        }
+
+    chosen = None
+    reason = ""
+    try:
+        if ANTHROPIC_KEY:
+            import httpx as _httpx
+
+            services_context = "\n".join(
+                f"- {k}: {SERVICES_CONFIG[k]['display']} (impact ${SERVICES_CONFIG[k]['impact']:,})"
+                for k in healthy
+            )
+            prompt = (
+                f"You are an ops simulation AI for Campbell & Company, a quantitative trading firm.\n"
+                f"Available healthy services to simulate a failure on:\n{services_context}\n\n"
+                f"Pick the MOST INTERESTING and REALISTIC failure to simulate right now for a live demo.\n"
+                f"Consider: business impact, demo flow variety, narrative fit for a trading firm.\n"
+                f"Respond with ONLY the service key (one of: {', '.join(healthy)}) and a one-sentence reason.\n"
+                f"Format: <service_key>|<reason>"
+            )
+            async with _httpx.AsyncClient(timeout=8) as client:
+                resp = await client.post(
+                    "https://api.anthropic.com/v1/messages",
+                    headers={
+                        "x-api-key": ANTHROPIC_KEY,
+                        "anthropic-version": "2023-06-01",
+                        "content-type": "application/json",
+                    },
+                    json={
+                        "model": "claude-haiku-4-5",
+                        "max_tokens": 64,
+                        "messages": [{"role": "user", "content": prompt}],
+                    },
+                )
+                if resp.status_code == 200:
+                    text = resp.json().get("content", [{}])[0].get("text", "").strip()
+                    if "|" in text:
+                        parts = text.split("|", 1)
+                        candidate = parts[0].strip().lower()
+                        if candidate in healthy:
+                            chosen = candidate
+                            reason = parts[1].strip()
+    except Exception as e:
+        log.warning(f"AI simulate-random failed, falling back to random: {e}")
+
+    if not chosen:
+        import random
+
+        chosen = random.choice(healthy)
+        reason = f"Simulating {SERVICES_CONFIG[chosen]['display']} failure — ${SERVICES_CONFIG[chosen]['impact']:,} at risk"
+
+    await broadcast(
+        "kaji_activity",
+        {
+            "tool": "simulate_random",
+            "summary": f"AI selected: {SERVICES_CONFIG[chosen]['display']} — {reason}",
+        },
+    )
+
+    ts = datetime.utcnow().isoformat()
+    cfg = SERVICES_CONFIG[chosen]
+    service_failures[chosen] = {"error": cfg["error"], "injected_at": ts}
+    for level, msg in LOG_TEMPLATES.get(chosen, []):
+        log_buffer[chosen].append(
+            {"service": chosen, "level": level, "message": msg, "ts": ts}
+        )
+    await broadcast_log(chosen, "[CRITICAL]", cfg["error"])
+    await broadcast(
+        "service_failure",
+        {
+            "service": chosen,
+            "error": cfg["error"],
+            "impact": cfg["impact"],
+            "ai_reason": reason,
+        },
+    )
+
+    row = db_execute(
+        """INSERT INTO campbell_incidents(service, error, savings_value, status, mattermost_thread)
+           VALUES(%s,%s,%s,'open',%s) RETURNING id""",
+        [chosen, cfg["error"], cfg["impact"], None],
+        fetch=True,
+    )
+    incident_id = str(dict(row[0])["id"]) if row else None
+    mm_message = (
+        f"🎲 **[AI Simulation]** {cfg['display']}\n"
+        f"`{cfg['error'][:80]}`\n"
+        f"💰 **${cfg['impact']:,}** at risk | _Reason: {reason}_"
+    )
+    post_id = await post_mattermost(mm_message)
+    if incident_id and post_id:
+        db_execute(
+            "UPDATE campbell_incidents SET mattermost_thread=%s WHERE id=%s",
+            [post_id, incident_id],
+        )
+
+    await broadcast(
+        "incident_created",
+        {
+            "id": incident_id,
+            "service": chosen,
+            "error": cfg["error"],
+            "impact": cfg["impact"],
+            "display": cfg["display"],
+            "icon": cfg["icon"],
+            "ts": ts,
+            "ai_reason": reason,
+            "mattermost_thread": post_id,
+        },
+    )
+    return {
+        "status": "simulated",
+        "service": chosen,
+        "reason": reason,
+        "incident_id": incident_id,
+    }
 
 
 @app.get("/api/demo/summary")

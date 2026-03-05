@@ -1,0 +1,72 @@
+{
+  "name": "Campbell WF3 — Code Review with Human-in-the-Loop",
+  "active": true,
+  "nodes": [
+    {
+      "id": "wh1",
+      "name": "Review Request Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 300],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "campbell-code-review",
+        "responseMode": "lastNode",
+        "responseData": "allEntries"
+      }
+    },
+    {
+      "id": "fmt1",
+      "name": "Format Review Summary",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [460, 300],
+      "parameters": {
+        "jsCode": "const data = $input.first().json.body || $input.first().json;\nconst incident_id = data.incident_id;\nconst service = data.service;\nconst display = data.display || service;\nconst error = data.error || '';\nconst root_cause = data.root_cause || '';\nconst fix_diff = data.fix_diff || '';\nconst impact = data.impact || 0;\nconst historical_ref = data.historical_incident || 'N/A';\nconst source_file = data.source_file || '';\nconst source_line = data.source_line || '';\nconst demo_url = 'https://campbell-ops-demo.dev.hyperplane.dev';\n\nreturn [{\n  json: {\n    incident_id,\n    service,\n    display,\n    error,\n    root_cause,\n    fix_diff,\n    impact,\n    historical_ref,\n    source_file,\n    source_line,\n    approve_url: `${demo_url}/api/webhooks/approve/${incident_id}`,\n    reject_url: `${demo_url}/api/webhooks/reject/${incident_id}`,\n    dashboard_url: `${demo_url}`,\n    review_text: `🔍 **Code Review Required — ${display}**\\n\\n**Error**: \\`${error.substring(0, 80)}\\`\\n**File**: \\`${source_file}:${source_line}\\`\\n**Root Cause**: ${root_cause.substring(0, 200)}\\n\\n**Proposed Fix (diff)**:\\n\\`\\`\\`diff\\n${fix_diff}\\n\\`\\`\\`\\n\\n💰 **$${impact.toLocaleString()}** at risk | Historical ref: **${historical_ref}**\\n\\n_Campbell Ops Co-Pilot — Quantitative Trading Infrastructure_`\n  }\n}];\n"
+      }
+    },
+    {
+      "id": "mm1",
+      "name": "Post to Mattermost with Buttons",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [680, 300],
+      "parameters": {
+        "method": "POST",
+        "url": "http://mattermost-mattermost-enterprise-edition.hyperplane-mattermost.svc.cluster.local:8065/api/v4/posts",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {"name": "Authorization", "value": "Bearer 3rn39b5hj7d4pyuytc46gudw6h"},
+            {"name": "Content-Type", "value": "application/json"}
+          ]
+        },
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"channel_id\": \"cw5wxp5wajrz5nkc1yeqyxbazc\",\n  \"message\": {{ JSON.stringify($json.review_text) }},\n  \"props\": {\n    \"attachments\": [{\n      \"color\": \"#C9A84C\",\n      \"fallback\": \"Code review required — approve or reject\",\n      \"actions\": [\n        {\n          \"id\": \"approve\",\n          \"name\": \"✅ Approve & Apply\",\n          \"style\": \"good\",\n          \"integration\": {\n            \"url\": {{ JSON.stringify($json.approve_url) }},\n            \"context\": { \"incident_id\": {{ JSON.stringify($json.incident_id) }}, \"action\": \"approve\" }\n          }\n        },\n        {\n          \"id\": \"reject\",\n          \"name\": \"❌ Reject — Ask Kaji to Retry\",\n          \"style\": \"danger\",\n          \"integration\": {\n            \"url\": {{ JSON.stringify($json.reject_url) }},\n            \"context\": { \"incident_id\": {{ JSON.stringify($json.incident_id) }}, \"action\": \"reject\" }\n          }\n        }\n      ]\n    }]\n  }\n}"
+      }
+    },
+    {
+      "id": "resp1",
+      "name": "Return Success",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [900, 300],
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\"status\": \"review_sent\", \"incident_id\": \"{{ $('Format Review Summary').item.json.incident_id }}\"}"
+      }
+    }
+  ],
+  "connections": {
+    "Review Request Webhook": {"main": [[{"node": "Format Review Summary", "type": "main", "index": 0}]]},
+    "Format Review Summary": {"main": [[{"node": "Post to Mattermost with Buttons", "type": "main", "index": 0}]]},
+    "Post to Mattermost with Buttons": {"main": [[{"node": "Return Success", "type": "main", "index": 0}]]}
+  },
+  "_meta": {
+    "description": "WF3 — Campbell Code Review with Human-in-the-Loop. Triggered by POST from Campbell API when Kaji diagnoses an incident. Formats a code review summary with the diff, risk level, and historical reference, then posts to #campbell-ops-alerts with ✅ Approve and ❌ Reject action buttons. Buttons call back directly to the Campbell API (no additional n8n step needed).",
+    "demo_talking_point": "Kaji finds the fix. n8n holds it for review. Jimmy approves from Mattermost. Nobody touched a server.",
+    "import_instructions": "Import this workflow in n8n v2 at https://n8n-v2.dev.hyperplane.dev. The webhook URL will be generated after activation. Update DEMO_URL in Campbell API env vars if needed."
+  }
+}
