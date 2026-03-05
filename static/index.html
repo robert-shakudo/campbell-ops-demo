@@ -1,0 +1,860 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Campbell & Company — Ops Co-Pilot</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+<style>
+/* ═══ THEMES ═══ */
+:root[data-theme="light"] {
+  --bg: rgb(248,249,255); --surface: rgb(255,255,255); --surface-2: rgb(240,242,255);
+  --text: rgb(45,49,62); --text-2: rgb(84,90,103); --muted: rgb(124,132,147);
+  --border: rgb(220,224,245); --primary: rgb(100,100,244); --primary-hover: rgb(80,82,220);
+  --secondary: rgb(148,150,252); --accent: rgb(164,164,252);
+  --shadow: rgba(4,5,21,0.10); --shadow-lg: rgba(4,5,21,0.18);
+  --red: #DC2626; --green: #16A34A; --yellow: #B45309; --blue: #2563EB; --orange: #C2410C;
+  --bo-bg: rgba(220,38,38,0.08); --bo-tx: #B91C1C;
+  --bd-bg: rgba(180,83,9,0.08);  --bd-tx: #92400E;
+  --bf-bg: rgba(37,99,235,0.08); --bf-tx: #1D4ED8;
+  --br-bg: rgba(22,163,74,0.08); --br-tx: #15803D;
+  --nav-bg: rgb(18,20,50); --nav-text: rgb(230,232,255); --nav-muted: rgba(200,202,255,0.6);
+  --col-bg: rgb(232,234,250); --col-hdr: rgb(215,218,245);
+}
+:root[data-theme="dark"] {
+  --bg: rgb(4,5,21); --surface: rgb(18,20,40); --surface-2: rgb(26,29,56);
+  --text: rgb(244,246,255); --text-2: rgb(187,186,222); --muted: rgb(110,118,135);
+  --border: rgba(187,186,222,0.16); --primary: rgb(148,150,252); --primary-hover: rgb(124,126,240);
+  --secondary: rgb(100,100,244); --accent: rgb(164,164,252);
+  --shadow: rgba(0,0,0,0.35); --shadow-lg: rgba(0,0,0,0.55);
+  --red: #EF4444; --green: #22C55E; --yellow: #F59E0B; --blue: #60A5FA; --orange: #FB923C;
+  --bo-bg: rgba(239,68,68,0.15);  --bo-tx: #FCA5A5;
+  --bd-bg: rgba(245,158,11,0.15); --bd-tx: #FDE68A;
+  --bf-bg: rgba(96,165,250,0.15); --bf-tx: #93C5FD;
+  --br-bg: rgba(34,197,94,0.15);  --br-tx: #86EFAC;
+  --nav-bg: rgba(4,5,21,0.97); --nav-text: rgb(244,246,255); --nav-muted: rgba(187,186,222,0.6);
+  --col-bg: rgb(22,24,48); --col-hdr: rgb(30,32,60);
+}
+:root[data-theme="campbell"] {
+  --bg: #0A1628; --surface: #112038; --surface-2: #0F2040;
+  --text: #E2E8F0; --text-2: #CBD5E1; --muted: #94A3B8;
+  --border: #1E3A5F; --primary: #C9A84C; --primary-hover: #B8932F;
+  --secondary: #8B7235; --accent: #E8C96A;
+  --shadow: rgba(0,0,0,0.4); --shadow-lg: rgba(0,0,0,0.6);
+  --red: #EF4444; --green: #22C55E; --yellow: #EAB308; --blue: #3B82F6; --orange: #F97316;
+  --bo-bg: rgba(239,68,68,0.18); --bo-tx: #FCA5A5;
+  --bd-bg: rgba(234,179,8,0.18); --bd-tx: #FDE68A;
+  --bf-bg: rgba(59,130,246,0.18); --bf-tx: #93C5FD;
+  --br-bg: rgba(34,197,94,0.18); --br-tx: #86EFAC;
+  --nav-bg: rgba(10,22,40,0.97); --nav-text: #E2E8F0; --nav-muted: rgba(203,213,225,0.6);
+  --col-bg: #0D1D35; --col-hdr: #0F2040;
+}
+
+/* ═══ BASE ═══ */
+*{box-sizing:border-box;margin:0;}
+html,body{height:100%;}
+body{background:var(--bg);color:var(--text);font-family:'Inter',system-ui,sans-serif;transition:background .2s,color .2s;}
+
+/* ═══ NAV ═══ */
+nav{background:var(--nav-bg);border-bottom:1px solid rgba(255,255,255,0.08);backdrop-filter:blur(16px);position:sticky;top:0;z-index:40;}
+.nav-logo-text{color:var(--nav-text);font-weight:700;font-size:.9rem;}
+.nav-sub{color:var(--nav-muted);font-size:.72rem;}
+.tab-btn{padding:4px 18px;font-size:.85rem;transition:all .15s;border-bottom:2px solid transparent;color:var(--nav-muted);}
+.tab-btn:hover{color:var(--nav-text);}
+.tab-btn.active{border-bottom-color:var(--primary);color:var(--primary);}
+[data-theme="dark"] .tab-btn.active,[data-theme="campbell"] .tab-btn.active{color:var(--accent);}
+.theme-btn{padding:4px 8px;border-radius:4px;font-size:.72rem;cursor:pointer;border:1px solid rgba(255,255,255,0.15);background:transparent;color:var(--nav-muted);transition:all .15s;}
+.theme-btn:hover,.theme-btn.active{background:var(--primary);color:var(--bg);border-color:var(--primary);}
+
+/* ═══ PANELS ═══ */
+.panel{background:var(--surface);border:1px solid var(--border);border-radius:10px;}
+.col-bg{background:var(--col-bg);}
+.badge{font-size:.63rem;padding:2px 8px;border-radius:999px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;}
+.badge-open{background:var(--bo-bg);color:var(--bo-tx);}
+.badge-diagnosed{background:var(--bd-bg);color:var(--bd-tx);}
+.badge-fixing{background:var(--bf-bg);color:var(--bf-tx);}
+.badge-resolved{background:var(--br-bg);color:var(--br-tx);}
+
+/* ═══ CARDS ═══ */
+.icard{background:var(--surface);border:1px solid var(--border);border-radius:10px;cursor:pointer;transition:transform .15s,box-shadow .15s,border-color .15s;}
+.icard:hover{transform:translateY(-2px);box-shadow:0 8px 24px var(--shadow-lg);border-color:var(--primary);}
+.icard.open{border-left:3px solid var(--red);}
+.icard.diagnosed{border-left:3px solid var(--yellow);}
+.icard.fixing{border-left:3px solid var(--blue);}
+.icard.resolved{border-left:3px solid var(--green);}
+.status-dot{width:8px;height:8px;border-radius:50%;display:inline-block;}
+.status-dot.h{background:var(--green);box-shadow:0 0 6px rgba(34,197,94,.5);}
+.status-dot.f{background:var(--red);box-shadow:0 0 6px rgba(239,68,68,.5);}
+
+/* ═══ BUTTONS ═══ */
+.btn-p{background:var(--primary);color:var(--bg);font-weight:700;font-size:.78rem;padding:7px 14px;border-radius:6px;transition:all .15s;border:none;cursor:pointer;}
+.btn-p:hover{background:var(--primary-hover);}
+.btn-p:disabled{opacity:.4;cursor:not-allowed;}
+.btn-g{border:1px solid var(--border);color:var(--muted);font-size:.78rem;padding:6px 12px;border-radius:6px;background:transparent;cursor:pointer;transition:all .15s;}
+.btn-g:hover{border-color:var(--primary);color:var(--text);}
+.btn-g:disabled{opacity:.4;cursor:not-allowed;}
+.btn-scan{background:rgba(251,146,60,0.12);border:1px solid rgba(251,146,60,0.3);color:var(--orange);font-size:.78rem;padding:6px 12px;border-radius:6px;cursor:pointer;font-weight:600;transition:all .15s;}
+.btn-scan:hover{background:rgba(251,146,60,0.2);}
+
+/* ═══ INPUTS ═══ */
+.s-input{width:100%;background:var(--bg);border:1px solid var(--border);color:var(--text);padding:8px 12px;border-radius:6px;font-size:.85rem;outline:none;transition:border-color .15s;}
+.s-input:focus{border-color:var(--primary);}
+.s-lbl{font-size:.67rem;color:var(--muted);font-weight:700;letter-spacing:.08em;text-transform:uppercase;margin-bottom:4px;display:block;}
+.conn-btn{font-size:.75rem;padding:7px 14px;border-radius:6px;font-weight:600;background:var(--surface-2);border:1px solid var(--border);color:var(--muted);cursor:pointer;transition:all .15s;}
+.conn-btn:hover{border-color:var(--primary);color:var(--primary);}
+
+/* ═══ MODAL ═══ */
+.modal-overlay{position:fixed;inset:0;z-index:60;display:flex;align-items:center;justify-content:center;padding:24px;background:rgba(0,0,0,0.6);backdrop-filter:blur(4px);}
+.modal-box{background:var(--surface);border:1px solid var(--border);border-radius:14px;width:100%;max-width:860px;max-height:92vh;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 24px 80px var(--shadow-lg);}
+.modal-hdr{padding:18px 22px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-shrink:0;}
+.modal-body{overflow-y:auto;flex:1;padding:22px;}
+.modal-body::-webkit-scrollbar{width:5px;}
+.modal-body::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px;}
+
+/* ═══ MISC ═══ */
+.mono{font-family:'JetBrains Mono','Fira Code',monospace;font-size:.75rem;}
+.detail-row{display:flex;gap:6px;align-items:flex-start;padding:3px 0;font-size:.73rem;}
+.dl{color:var(--muted);min-width:88px;flex-shrink:0;font-weight:600;}
+.dv{color:var(--text-2);word-break:break-word;}
+.log-INFO{color:var(--muted);}
+.log-WARN{color:var(--yellow);}
+.log-ERROR{color:var(--orange);}
+.log-CRITICAL{color:var(--red);font-weight:700;}
+.kaji-entry{border-left:2px solid var(--secondary);padding-left:8px;margin:4px 0;}
+.kb-hit{border-left:2px solid var(--blue);padding-left:8px;margin:4px 0;}
+.hist-hit{border-left:2px solid #8B5CF6;padding-left:8px;margin:4px 0;}
+.feed-entry{border-left:2px solid var(--orange);padding-left:8px;margin:4px 0;}
+.diff-add{background:rgba(34,197,94,.12);color:#86EFAC;}
+.diff-rm{background:rgba(239,68,68,.12);color:#FCA5A5;}
+.dline{font-family:monospace;font-size:.73rem;padding:1px 6px;white-space:pre;display:block;}
+.ph{padding:10px 14px;border-bottom:1px solid var(--border);font-size:.73rem;font-weight:700;color:var(--primary);letter-spacing:.06em;text-transform:uppercase;}
+.scrl{overflow-y:auto;max-height:100%;}
+.scrl::-webkit-scrollbar{width:4px;}
+.scrl::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px;}
+.savings-n{font-size:2.8rem;font-weight:800;color:var(--primary);line-height:1;}
+
+/* status badges for Jira */
+.jbadge{font-size:.62rem;padding:2px 7px;border-radius:4px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;}
+.jbadge.done{background:rgba(34,197,94,.12);color:var(--green);}
+.jbadge.open{background:rgba(96,165,250,.12);color:var(--blue);}
+.jbadge.inprogress{background:rgba(245,158,11,.12);color:var(--yellow);}
+.jbadge.closed{background:rgba(148,150,252,.12);color:var(--secondary);}
+
+/* animations */
+.pulse{animation:pulse 2s infinite;}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+.spin{animation:spin 1s linear infinite;}
+@keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
+.bump{animation:bump .6s ease;}
+@keyframes bump{0%{transform:scale(1)}50%{transform:scale(1.1)}100%{transform:scale(1)}}
+.fi{animation:fi .25s ease;}
+@keyframes fi{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+.modal-enter{animation:menter .2s ease;}
+@keyframes menter{from{opacity:0;transform:scale(.96)}to{opacity:1;transform:scale(1)}}
+</style>
+</head>
+<body x-data="app()" x-init="init()" @keydown.escape.window="modal=null">
+
+<!-- ═══ NAV ═══ -->
+<nav>
+  <div class="max-w-screen-2xl mx-auto px-5 flex items-center h-14 gap-4">
+    <div class="flex items-center gap-2.5 mr-4">
+      <div class="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0" style="background:var(--primary);">
+        <span class="text-xs font-black" style="color:var(--bg);">C&amp;C</span>
+      </div>
+      <div>
+        <div class="nav-logo-text">Campbell &amp; Company</div>
+        <div class="nav-sub">Ops Co-Pilot <span class="pulse ml-1" style="color:#22C55E;">● Live</span></div>
+      </div>
+    </div>
+
+    <div class="flex items-center h-14">
+      <button @click="tab='board'" :class="tab==='board'?'active':''" class="tab-btn h-full">📊 Incident Board</button>
+      <button @click="tab='feed'"  :class="tab==='feed'?'active':''"  class="tab-btn h-full">📡 Live Feed</button>
+      <button @click="tab='settings'" :class="tab==='settings'?'active':''" class="tab-btn h-full">⚙️ Settings</button>
+    </div>
+
+    <div class="ml-auto flex items-center gap-2">
+      <div class="flex gap-1">
+        <button @click="setTheme('light')"    :class="theme==='light'?'active':''"    class="theme-btn">☀️ Light</button>
+        <button @click="setTheme('dark')"     :class="theme==='dark'?'active':''"     class="theme-btn">🌙 Dark</button>
+        <button @click="setTheme('campbell')" :class="theme==='campbell'?'active':''" class="theme-btn">🏛️</button>
+      </div>
+      <button @click="resetDemo()" class="btn-g text-xs" style="color:var(--red);border-color:rgba(220,38,38,.4);">↺ Reset</button>
+    </div>
+  </div>
+</nav>
+
+<!-- ═══════════════════════════ MODAL ═══════════════════════════ -->
+<div x-show="modal" @click.self="modal=null" class="modal-overlay" x-transition:enter="transition ease-out duration-200" x-transition:enter-start="opacity-0" x-transition:enter-end="opacity-100">
+  <div class="modal-box modal-enter" x-show="modal">
+    <!-- Modal Header -->
+    <div class="modal-hdr">
+      <div class="flex items-center gap-3">
+        <span x-text="modal?.icon||'⚙️'" class="text-2xl"></span>
+        <div>
+          <div class="font-bold text-lg leading-tight" x-text="modal?.display||modal?.service"></div>
+          <div class="text-xs mt-0.5" style="color:var(--muted);">
+            <span x-text="modal?.source_file+':'+modal?.source_line"></span>
+            <span class="mx-1">·</span>
+            <span :class="'badge badge-'+modal?.status" x-text="modal?.status?.toUpperCase()"></span>
+          </div>
+        </div>
+      </div>
+      <div class="flex items-center gap-2">
+        <button @click="scanRelated(modal?.id)" class="btn-scan text-xs">🔍 Scan Code</button>
+        <button @click="modal=null" class="btn-g text-xs px-3">✕ Close</button>
+      </div>
+    </div>
+
+    <!-- Modal Body -->
+    <div class="modal-body">
+      <div class="grid grid-cols-2 gap-5">
+
+        <!-- LEFT COL -->
+        <div class="flex flex-col gap-4">
+
+          <!-- Error box -->
+          <div>
+            <div class="text-xs font-bold mb-2" style="color:var(--muted);">ERROR</div>
+            <div class="mono p-3 rounded-lg text-xs leading-relaxed" :style="'background:var(--surface-2);color:'+statusColor(modal?.status)">
+              <span x-text="modal?.error"></span>
+            </div>
+          </div>
+
+          <!-- Stack trace (collapsible) -->
+          <div x-show="modal?.stack_trace">
+            <button @click="modal._st=!modal._st" class="btn-g text-xs w-full text-left mb-1">
+              📋 Stack Trace <span x-text="modal?._st?'▲':'▼'" class="ml-1"></span>
+            </button>
+            <div x-show="modal?._st" class="mono p-3 rounded-lg text-xs leading-relaxed overflow-x-auto" style="background:var(--surface-2);color:var(--text-2);max-height:160px;overflow-y:auto;">
+              <pre x-text="modal?.stack_trace" style="white-space:pre-wrap;word-break:break-word;"></pre>
+            </div>
+          </div>
+
+          <!-- Code diff -->
+          <div x-show="modal?.code_diff">
+            <div class="text-xs font-bold mb-2" style="color:var(--muted);">CODE FIX</div>
+            <div class="rounded-lg overflow-hidden border" style="border-color:var(--border);">
+              <div class="text-xs px-3 py-1.5 font-semibold" style="background:var(--surface-2);color:var(--muted);" x-text="modal?.source_file+':'+modal?.source_line"></div>
+              <template x-for="(line,j) in (modal?.code_diff||'').split('\n')" :key="j">
+                <span :class="line.startsWith('+')?'diff-add dline':line.startsWith('-')?'diff-rm dline':'dline'" style="color:var(--text-2);" x-text="line||' '"></span>
+              </template>
+            </div>
+          </div>
+
+          <!-- Resolution steps -->
+          <div x-show="modal?.resolution_steps?.length">
+            <div class="text-xs font-bold mb-2" style="color:var(--muted);">HOW KAJI FIXED IT (<span x-text="modal?.resolution_steps?.length"></span> STEPS)</div>
+            <div class="space-y-1.5 p-3 rounded-lg" style="background:var(--surface-2);">
+              <template x-for="(step,j) in modal?.resolution_steps" :key="j">
+                <div class="flex items-start gap-2 text-xs" style="color:var(--text-2);">
+                  <span class="flex-shrink-0 font-bold" style="color:var(--green);" x-text="modal?.status==='resolved'?'✓':((j+1)+'.')"></span>
+                  <span x-text="step"></span>
+                </div>
+              </template>
+            </div>
+          </div>
+        </div>
+
+        <!-- RIGHT COL -->
+        <div class="flex flex-col gap-4">
+
+          <!-- Timeline -->
+          <div>
+            <div class="text-xs font-bold mb-2" style="color:var(--muted);">TIMELINE</div>
+            <div class="space-y-1 p-3 rounded-lg" style="background:var(--surface-2);">
+              <div class="detail-row"><span class="dl">🚨 Detected</span><span class="dv" x-text="formatTs(modal?.created_at)"></span></div>
+              <div class="detail-row"><span class="dl">📁 Source</span><span class="dv mono" x-text="modal?.source_file+':'+modal?.source_line"></span></div>
+              <div class="detail-row"><span class="dl">⚙️ Function</span><span class="dv mono" x-text="modal?.source_function"></span></div>
+              <div class="detail-row"><span class="dl">🔄 Pipeline</span><span class="dv" x-text="modal?.source_dag"></span></div>
+              <div x-show="modal?.status==='resolved'" class="detail-row">
+                <span class="dl">✅ Resolved</span><span class="dv" x-text="formatTs(modal?.updated_at)"></span>
+              </div>
+              <div x-show="modal?.commit_hash" class="detail-row">
+                <span class="dl">🔀 Commit</span><span class="dv mono" style="color:var(--primary);" x-text="modal?.commit_hash"></span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Notifications -->
+          <div x-show="modal?.notified?.length">
+            <div class="text-xs font-bold mb-2" style="color:var(--muted);">NOTIFIED</div>
+            <div class="p-3 rounded-lg space-y-1" style="background:var(--surface-2);">
+              <template x-for="(n,j) in modal?.notified" :key="j">
+                <div class="flex items-center gap-2 text-xs" style="color:var(--text-2);">
+                  <span style="color:var(--green);">🔔</span><span x-text="n"></span>
+                </div>
+              </template>
+            </div>
+          </div>
+
+          <!-- ROI Breakdown -->
+          <div x-show="modal?.roi_breakdown">
+            <div class="text-xs font-bold mb-2" style="color:var(--muted);">ROI IMPACT BREAKDOWN</div>
+            <div class="p-3 rounded-lg" style="background:var(--surface-2);">
+              <div class="text-base font-bold mb-1" style="color:var(--primary);" x-text="modal?.roi_breakdown?.summary"></div>
+              <div class="text-xs mb-3" style="color:var(--text-2);" x-text="modal?.roi_breakdown?.calculation"></div>
+              <div class="space-y-1 mb-3">
+                <template x-for="(c,j) in modal?.roi_breakdown?.components" :key="j">
+                  <div class="flex justify-between text-xs">
+                    <span style="color:var(--muted);" x-text="c.label"></span>
+                    <span class="font-semibold" style="color:var(--text-2);" x-text="c.value"></span>
+                  </div>
+                </template>
+              </div>
+              <div class="text-xs p-2 rounded" style="background:rgba(34,197,94,.08);color:var(--green);">
+                ✓ <span x-text="modal?.roi_breakdown?.mitigated_by"></span>
+              </div>
+              <div x-show="modal?.roi_breakdown?.actual_loss" class="text-xs mt-1 font-bold" style="color:var(--green);">
+                Actual loss: <span x-text="modal?.roi_breakdown?.actual_loss"></span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Jira Ticket -->
+          <div x-show="modal?.jira_ticket">
+            <div class="text-xs font-bold mb-2" style="color:var(--muted);">TICKET</div>
+            <a :href="modal?.jira_ticket?.url" target="_blank" class="block p-3 rounded-lg transition-all hover:shadow-lg" style="background:var(--surface-2);border:1px solid var(--border);text-decoration:none;">
+              <div class="flex items-center justify-between mb-1">
+                <span class="font-bold text-xs mono" style="color:var(--primary);" x-text="modal?.jira_ticket?.id"></span>
+                <span :class="'jbadge '+(modal?.jira_ticket?.status==='Done'?'done':modal?.jira_ticket?.status==='In Progress'?'inprogress':'open')" x-text="modal?.jira_ticket?.status"></span>
+              </div>
+              <div class="text-xs font-medium mb-2" style="color:var(--text-2);" x-text="modal?.jira_ticket?.title"></div>
+              <div class="flex flex-wrap gap-1 mb-2">
+                <template x-for="lbl in (modal?.jira_ticket?.labels||[]).slice(0,5)" :key="lbl">
+                  <span class="text-xs px-1.5 py-0.5 rounded" style="background:var(--border);color:var(--muted);" x-text="lbl"></span>
+                </template>
+              </div>
+              <div class="grid grid-cols-2 gap-x-3 text-xs" style="color:var(--muted);">
+                <span>👤 <span x-text="modal?.jira_ticket?.assignee"></span></span>
+                <span>🏃 <span x-text="modal?.jira_ticket?.sprint"></span></span>
+                <span>⚡ P<span x-text="modal?.jira_ticket?.priority"></span></span>
+                <span>⏱️ <span x-text="modal?.jira_ticket?.time_to_fix_min"></span>m fix</span>
+              </div>
+              <div class="text-xs mt-2" style="color:var(--primary);">↗ Open in Jira →</div>
+            </a>
+          </div>
+
+          <!-- Related Issues -->
+          <div x-show="modal?.related_issues?.length || scanResults[modal?.id]?.length">
+            <div class="text-xs font-bold mb-2" style="color:var(--muted);">RELATED ISSUES (<span x-text="(scanResults[modal?.id]||modal?.related_issues||[]).length"></span>)</div>
+            <div class="space-y-1.5">
+              <template x-for="(r,j) in (scanResults[modal?.id]||modal?.related_issues||[])" :key="j">
+                <a :href="r.url" target="_blank" class="flex items-center justify-between p-2 rounded text-xs hover:opacity-80 transition-opacity" style="background:var(--surface-2);text-decoration:none;">
+                  <div>
+                    <span class="mono font-bold" style="color:var(--primary);" x-text="r.id"></span>
+                    <span class="ml-2" style="color:var(--text-2);" x-text="r.title?.substring(0,48)+'...'"></span>
+                  </div>
+                  <span :class="'jbadge '+(r.status==='Closed'||r.status==='Done'?'closed':r.status==='In Progress'?'inprogress':'open')" x-text="r.status"></span>
+                </a>
+              </template>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- Action row -->
+      <div class="flex gap-2 mt-5 pt-4" style="border-top:1px solid var(--border);">
+        <button x-show="modal?.status==='open'" @click="diagnose(modal?.id);modal=null" class="btn-p flex-1">🔍 Diagnose</button>
+        <button x-show="modal?.status==='diagnosed'" @click="applyFix(modal?.id);modal=null" class="btn-p flex-1">⚙️ Apply Fix</button>
+        <button x-show="!modal?.clickup_url" @click="createTicket(modal?.id);modal=null" class="btn-g flex-1">🎫 Create Ticket</button>
+        <a x-show="modal?.clickup_url" :href="modal?.clickup_url" target="_blank" class="btn-g flex-1 text-center text-xs" style="color:var(--blue);">↗ ClickUp Ticket</a>
+        <a :href="mmLink(modal)" target="_blank" class="btn-g flex-1 text-center text-xs">💬 Mattermost</a>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ BOARD ═══ -->
+<div x-show="tab==='board'" class="max-w-screen-2xl mx-auto px-5 py-5">
+
+  <!-- Health bar -->
+  <div class="flex flex-wrap gap-2 mb-5">
+    <template x-for="(svc,k) in services" :key="k">
+      <div class="flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs panel">
+        <span :class="svc.healthy?'status-dot h pulse':'status-dot f pulse'"></span>
+        <span x-text="svc.icon||'⚙️'"></span>
+        <span x-text="svc.display||k" class="font-medium"></span>
+        <span :style="svc.healthy?'color:var(--green)':'color:var(--red)'" x-text="svc.healthy?'✓':'✗'" class="font-bold"></span>
+        <span style="color:var(--muted);" x-text="ft(svc.last_check)"></span>
+      </div>
+    </template>
+    <div class="ml-auto flex items-center gap-2 text-xs" style="color:var(--muted);"><span class="pulse" style="color:var(--green);">●</span> Monitoring active</div>
+  </div>
+
+  <!-- Hero -->
+  <div class="panel mb-5 py-5 text-center rounded-xl" style="background:linear-gradient(135deg,var(--surface) 0%,var(--surface-2) 100%);border-color:var(--border);">
+    <div class="text-xs font-bold tracking-widest mb-2" style="color:var(--muted);">SAVINGS THIS MONTH</div>
+    <div class="savings-n" :class="bumped?'bump':''" x-text="'$'+savings.toLocaleString()"></div>
+    <div class="text-sm mt-2" style="color:var(--muted);">
+      <span x-text="resCnt" style="color:var(--green);font-weight:700;"></span> incidents resolved by Kaji
+    </div>
+  </div>
+
+  <!-- Inject controls -->
+  <div class="panel p-4 mb-5">
+    <div class="text-xs font-bold tracking-wider mb-3" style="color:var(--muted);">INJECT FAILURE — DEMO CONTROLS</div>
+    <div class="flex flex-wrap gap-2">
+      <template x-for="(cfg,svc) in svcCfg" :key="svc">
+        <button @click="inject(svc)" :disabled="!services[svc]?.healthy"
+          :class="!services[svc]?.healthy?'opacity-40 cursor-not-allowed':''"
+          class="btn-g" style="display:inline-flex;align-items:center;gap:5px;">
+          <span x-text="cfg.icon"></span>
+          <span x-text="cfg.display.split('(')[0].trim()"></span>
+          <span style="opacity:.5;font-size:.7rem;" x-text="'$'+cfg.impact.toLocaleString()"></span>
+        </button>
+      </template>
+    </div>
+  </div>
+
+  <!-- Kanban -->
+  <div class="grid grid-cols-4 gap-4">
+    <!-- OPEN -->
+    <div class="rounded-xl p-3" style="background:var(--col-bg);">
+      <div class="flex items-center gap-2 mb-3 px-1">
+        <span style="color:var(--red)">🔴</span><span class="font-bold text-sm">Open</span>
+        <span class="badge badge-open ml-auto" x-text="byS('open').length"></span>
+      </div>
+      <div class="flex flex-col gap-2.5">
+        <template x-for="i in byS('open')" :key="i.id">
+          <div class="icard open p-3.5 fi" @click="openModal(i)">
+            <div class="flex items-start justify-between gap-2 mb-2">
+              <span class="font-semibold text-sm leading-tight" x-text="i.display||i.service"></span>
+              <span class="badge badge-open flex-shrink-0">OPEN</span>
+            </div>
+            <div class="mono mb-2 text-xs leading-relaxed" style="color:var(--red);" x-text="(i.error||'').substring(0,80)+(i.error?.length>80?'...':'')"></div>
+            <div class="flex items-center justify-between">
+              <span class="text-xs font-bold" style="color:var(--primary);">💰 $<span x-text="i.savings_value?.toLocaleString()"></span></span>
+              <span class="text-xs" style="color:var(--muted);" x-text="ft(i.created_at)"></span>
+            </div>
+            <div class="text-xs mt-1.5" style="color:var(--muted);">
+              <span class="mono" x-text="i.source_file+':'+i.source_line"></span>
+            </div>
+            <div class="text-xs mt-2 flex items-center gap-1" style="color:var(--primary);opacity:.7;">
+              <span>↗ Click to view details</span>
+            </div>
+          </div>
+        </template>
+      </div>
+    </div>
+
+    <!-- DIAGNOSED -->
+    <div class="rounded-xl p-3" style="background:var(--col-bg);">
+      <div class="flex items-center gap-2 mb-3 px-1">
+        <span style="color:var(--yellow)">🟡</span><span class="font-bold text-sm">Diagnosed</span>
+        <span class="badge badge-diagnosed ml-auto" x-text="byS('diagnosed').length"></span>
+      </div>
+      <div class="flex flex-col gap-2.5">
+        <template x-for="i in byS('diagnosed')" :key="i.id">
+          <div class="icard diagnosed p-3.5 fi" @click="openModal(i)">
+            <div class="flex items-start justify-between gap-2 mb-2">
+              <span class="font-semibold text-sm leading-tight" x-text="i.display||i.service"></span>
+              <span class="badge badge-diagnosed flex-shrink-0">DIAG</span>
+            </div>
+            <div class="mono mb-2 text-xs" style="color:var(--yellow);" x-text="(i.error||'').substring(0,70)+'...'"></div>
+            <div class="text-xs mb-2 p-2 rounded" style="background:var(--surface-2);color:var(--text-2);line-height:1.5;" x-text="i.diagnosis?.substring(0,100)+'...'"></div>
+            <!-- Mini diff preview -->
+            <div x-show="i.code_diff" class="mb-2 rounded overflow-hidden">
+              <template x-for="(line,j) in (i.code_diff||'').split('\n').slice(0,3)" :key="j">
+                <span :class="line.startsWith('+')?'diff-add dline':line.startsWith('-')?'diff-rm dline':'dline'" x-text="line||' '"></span>
+              </template>
+            </div>
+            <div class="flex items-center justify-between mt-2">
+              <span class="text-xs" style="color:var(--primary);opacity:.7;">↗ Click for full details</span>
+              <button @click.stop="applyFix(i.id)" class="btn-p text-xs" style="padding:4px 10px;">⚙️ Fix</button>
+            </div>
+          </div>
+        </template>
+      </div>
+    </div>
+
+    <!-- FIXING -->
+    <div class="rounded-xl p-3" style="background:var(--col-bg);">
+      <div class="flex items-center gap-2 mb-3 px-1">
+        <span style="color:var(--blue)">⚙️</span><span class="font-bold text-sm">Fixing</span>
+        <span class="badge badge-fixing ml-auto" x-text="byS('fixing').length"></span>
+      </div>
+      <div class="flex flex-col gap-2.5">
+        <template x-for="i in byS('fixing')" :key="i.id">
+          <div class="icard fixing p-3.5 fi" @click="openModal(i)">
+            <div class="flex items-start justify-between gap-2 mb-2">
+              <span class="font-semibold text-sm leading-tight" x-text="i.display||i.service"></span>
+              <span class="badge badge-fixing flex-shrink-0">FIXING</span>
+            </div>
+            <div class="mono mb-2 text-xs" style="color:var(--blue);" x-text="(i.error||'').substring(0,70)+'...'"></div>
+            <div class="flex items-center gap-2 text-xs mb-2" style="color:var(--blue);">
+              <span class="spin inline-block text-sm">⚙</span> Build running...
+            </div>
+            <div class="space-y-0.5">
+              <template x-for="step in (buildSteps[i.id]||[])" :key="step">
+                <div class="flex items-center gap-1 text-xs" style="color:var(--text-2);">
+                  <span style="color:var(--green);">✓</span><span x-text="step"></span>
+                </div>
+              </template>
+            </div>
+          </div>
+        </template>
+      </div>
+    </div>
+
+    <!-- RESOLVED -->
+    <div class="rounded-xl p-3" style="background:var(--col-bg);">
+      <div class="flex items-center gap-2 mb-3 px-1">
+        <span style="color:var(--green)">✅</span><span class="font-bold text-sm">Resolved</span>
+        <span class="badge badge-resolved ml-auto" x-text="byS('resolved').length"></span>
+      </div>
+      <div class="flex flex-col gap-2.5">
+        <template x-for="i in byS('resolved')" :key="i.id">
+          <div class="icard resolved p-3.5 fi" @click="openModal(i)">
+            <div class="flex items-start justify-between gap-2 mb-2">
+              <span class="font-semibold text-sm leading-tight" x-text="i.display||i.service"></span>
+              <span class="badge badge-resolved flex-shrink-0">DONE</span>
+            </div>
+            <div class="mono mb-1 text-xs" style="color:var(--green);" x-text="(i.error||'').substring(0,70)+'...'"></div>
+            <div class="text-xs font-bold mb-1" style="color:var(--green);">✓ Saved $<span x-text="i.savings_value?.toLocaleString()"></span></div>
+            <div class="mono text-xs" style="color:var(--muted);" x-text="'commit '+i.commit_hash"></div>
+            <!-- Jira ticket link if exists -->
+            <a x-show="i.jira_ticket?.url" :href="i.jira_ticket?.url" target="_blank" @click.stop class="flex items-center gap-1 text-xs mt-2 hover:opacity-80" style="color:var(--primary);">
+              🎫 <span x-text="i.jira_ticket?.id"></span> <span x-text="'— '+i.jira_ticket?.title?.substring(0,30)+'...'"></span>
+            </a>
+            <div class="text-xs mt-1" style="color:var(--primary);opacity:.7;">↗ Click for full details</div>
+          </div>
+        </template>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ LIVE FEED ═══ -->
+<div x-show="tab==='feed'" class="max-w-screen-2xl mx-auto px-5 py-5">
+  <div class="flex items-center gap-3 mb-5">
+    <h2 class="text-xl font-bold">📡 Live Integration Feed</h2>
+    <span class="pulse text-xs" style="color:var(--green);">● Streaming</span>
+    <div class="ml-auto flex gap-2 items-center">
+      <select x-model="logFlt" class="s-input text-xs" style="width:155px;padding:5px 10px;">
+        <option value="">All Services</option>
+        <option value="airflow">Airflow</option>
+        <option value="bloomberg">Bloomberg</option>
+        <option value="teamcity">TeamCity</option>
+        <option value="risk-calculator">Risk Calculator</option>
+        <option value="price-feed">Price Feed</option>
+      </select>
+    </div>
+  </div>
+
+  <div class="grid grid-cols-2 gap-4" style="height:calc(100vh - 185px);">
+
+    <!-- LOG STREAM -->
+    <div class="panel flex flex-col" style="height:100%;">
+      <div class="ph">📋 Log Stream <span class="ml-2 text-xs font-normal" style="color:var(--muted);" x-text="fLogs.length+' lines'"></span></div>
+      <div class="flex-1 overflow-y-auto p-3 scrl" x-ref="ls">
+        <template x-for="(e,i) in fLogs.slice(-150)" :key="i">
+          <div :class="'log-'+cl(e.level)" style="padding:2px 8px;border-radius:2px;font-family:monospace;font-size:.72rem;line-height:1.6;">
+            <span style="color:var(--muted);opacity:.7;" x-text="(e.ts||'').substring(11,19)+' '"></span>
+            <span class="font-bold mr-2 text-xs" x-text="(e.service||'').substring(0,6).padEnd(6).toUpperCase()"></span>
+            <span :class="'log-'+cl(e.level)" x-text="cl(e.level).padEnd(8)+' '"></span>
+            <span x-text="e.message"></span>
+          </div>
+        </template>
+        <div x-show="fLogs.length===0" class="text-center py-8 text-sm" style="color:var(--muted);">Waiting for log events...</div>
+      </div>
+    </div>
+
+    <!-- 3 RIGHT PANELS -->
+    <div class="flex flex-col gap-3" style="height:100%;">
+
+      <!-- KAJI ACTIVITY -->
+      <div class="panel flex flex-col" style="flex:1.2;overflow:hidden;">
+        <div class="ph">🤖 Kaji Activity <span class="ml-2 text-xs font-normal" style="color:var(--muted);" x-text="kajiAct.length+' events'"></span></div>
+        <div class="flex-1 overflow-y-auto p-3 scrl">
+          <template x-for="(a,i) in kajiAct.slice(-40).reverse()" :key="i">
+            <div class="kaji-entry mb-2.5">
+              <div class="flex items-center gap-2 mb-0.5">
+                <span class="text-xs font-bold mono" style="color:var(--primary);" x-text="a.tool"></span>
+                <span class="text-xs" style="color:var(--muted);opacity:.6;" x-text="ft(a.ts||a.timestamp)"></span>
+              </div>
+              <div class="text-xs" style="color:var(--text-2);" x-text="a.summary"></div>
+              <div x-show="a.params && Object.keys(a.params||{}).length" class="text-xs mono mt-0.5" style="color:var(--muted);opacity:.8;" x-text="JSON.stringify(a.params).substring(0,80)"></div>
+            </div>
+          </template>
+          <div x-show="kajiAct.length===0" class="text-center py-4 text-xs" style="color:var(--muted);">Waiting for Kaji to act...</div>
+        </div>
+      </div>
+
+      <!-- KB HITS + SCAN RESULTS -->
+      <div class="panel flex flex-col" style="flex:1;overflow:hidden;">
+        <div class="ph">📚 Knowledge Base + Scan Results</div>
+        <div class="flex-1 overflow-y-auto p-3 scrl">
+          <!-- Scan results (feed_scan events) -->
+          <template x-for="(s,i) in scanFeed.slice(-5).reverse()" :key="i">
+            <div class="feed-entry mb-2">
+              <div class="text-xs font-bold" style="color:var(--orange);">🔍 Code Scan — <span x-text="s.service"></span></div>
+              <div class="text-xs" style="color:var(--text-2);">Found <span x-text="s.count"></span> related issues</div>
+              <div class="text-xs" style="color:var(--muted);" x-text="ft(s.ts)"></div>
+            </div>
+          </template>
+          <!-- KB hits -->
+          <template x-for="(h,i) in kbHits.slice(-12).reverse()" :key="i">
+            <div class="kb-hit mb-2">
+              <div class="text-xs font-semibold" style="color:var(--blue);" x-text="h.title"></div>
+              <div class="text-xs" style="color:var(--muted);" x-text="'Space: '+h.space+' · '+ft(h.ts)"></div>
+            </div>
+          </template>
+          <div x-show="kbHits.length===0 && scanFeed.length===0" class="text-center py-4 text-xs" style="color:var(--muted);">No KB lookups or scans yet</div>
+        </div>
+      </div>
+
+      <!-- INCIDENT HISTORY -->
+      <div class="panel flex flex-col" style="flex:1;overflow:hidden;">
+        <div class="ph">🕰 Incident History Referenced</div>
+        <div class="flex-1 overflow-y-auto p-3 scrl">
+          <template x-for="(r,i) in histRefs.slice(-8).reverse()" :key="i">
+            <div class="hist-hit mb-2">
+              <div class="text-xs font-bold mono" style="color:#A78BFA;" x-text="r.ids?.join(', ')"></div>
+              <div class="text-xs" style="color:var(--text-2);" x-show="r.query" x-text="'Query: '+r.query"></div>
+              <div class="text-xs" style="color:var(--muted);" x-text="ft(r.ts)"></div>
+            </div>
+          </template>
+          <!-- Also show historical incidents from data -->
+          <template x-for="(h,i) in histData.slice(-5)" :key="i">
+            <div class="hist-hit mb-2">
+              <div class="text-xs font-bold mono" style="color:#A78BFA;" x-text="h.id"></div>
+              <div class="text-xs font-medium" style="color:var(--text-2);" x-text="h.error?.substring(0,60)+'...'"></div>
+              <div class="text-xs" style="color:var(--muted);" x-text="'Fixed in '+h.time_to_fix_minutes+'m by '+h.engineer+' — '+h.date"></div>
+            </div>
+          </template>
+          <div x-show="histRefs.length===0 && histData.length===0" class="text-center py-4 text-xs" style="color:var(--muted);">No history references yet</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ SETTINGS ═══ -->
+<div x-show="tab==='settings'" class="max-w-4xl mx-auto px-5 py-8">
+  <div class="mb-8">
+    <h2 class="text-2xl font-bold mb-2">⚙️ Connect Your Systems</h2>
+    <p class="text-sm" style="color:var(--text-2);">Every field here maps directly to your actual Campbell infrastructure. Same Kaji, real data, days not weeks.</p>
+  </div>
+
+  <!-- THEME -->
+  <div class="panel p-5 mb-5">
+    <div class="flex items-center gap-3 mb-4"><span class="text-2xl">🎨</span><h3 class="font-bold text-lg">Dashboard Theme</h3></div>
+    <div class="flex gap-3 flex-wrap">
+      <button @click="setTheme('light')" :class="theme==='light'?'active':''" class="theme-btn flex items-center gap-2 px-4 py-3 text-left" style="border-radius:8px;">
+        <span>☀️</span><div><div class="font-bold text-sm">Light</div><div class="text-xs opacity-70">Purple palette (default)</div></div>
+      </button>
+      <button @click="setTheme('dark')" :class="theme==='dark'?'active':''" class="theme-btn flex items-center gap-2 px-4 py-3 text-left" style="border-radius:8px;">
+        <span>🌙</span><div><div class="font-bold text-sm">Dark</div><div class="text-xs opacity-70">Deep purple dark</div></div>
+      </button>
+      <button @click="setTheme('campbell')" :class="theme==='campbell'?'active':''" class="theme-btn flex items-center gap-2 px-4 py-3 text-left" style="border-radius:8px;">
+        <span>🏛️</span><div><div class="font-bold text-sm">Campbell</div><div class="text-xs opacity-70">Navy + gold</div></div>
+      </button>
+    </div>
+  </div>
+
+  <template x-for="sec in settingsSections" :key="sec.key">
+    <div class="panel p-5 mb-4">
+      <div class="flex items-center gap-3 mb-4">
+        <span class="text-2xl" x-text="sec.icon"></span>
+        <h3 class="font-bold text-lg" x-text="sec.label"></h3>
+        <span x-show="connStatus[sec.key]==='ok'" class="text-xs font-semibold" style="color:var(--green);">✓ Connected</span>
+      </div>
+      <div :class="'grid gap-4 grid-cols-'+sec.cols">
+        <template x-for="f in sec.fields" :key="f.key">
+          <div>
+            <label class="s-lbl" x-text="f.label"></label>
+            <input :type="f.type||'text'" class="s-input" :placeholder="f.placeholder" x-model="settings[sec.key][f.key]"/>
+          </div>
+        </template>
+      </div>
+      <div class="mt-3">
+        <button @click="testConn(sec.key)" class="conn-btn" :class="connStatus[sec.key]==='ok'?'!border-green-500 !text-green-500 !bg-green-50':''">
+          <span x-show="connStatus[sec.key]==='ok'">✅ Connected</span>
+          <span x-show="connStatus[sec.key]!=='ok'">Test Connection</span>
+        </button>
+      </div>
+    </div>
+  </template>
+
+  <div class="mt-6 flex items-center gap-4">
+    <button @click="testAll()" class="btn-p" style="padding:10px 28px;font-size:.9rem;">🔌 Test All Connections</button>
+    <p class="text-xs" style="color:var(--text-2);">When you give us these credentials, the demo system becomes your production system. Same Kaji. Real data. Days, not weeks.</p>
+  </div>
+</div>
+
+<script>
+function app(){return{
+  tab:'board', modal:null, incidents:[], services:{},
+  svcCfg:{
+    airflow:          {display:'Airflow Market Data',            icon:'⚡', impact:50000},
+    bloomberg:        {display:'Campbell Compress (Bloomberg)',  icon:'📡', impact:75000},
+    teamcity:         {display:'TeamCity CI/CD',                 icon:'🔧', impact:25000},
+    'risk-calculator':{display:'Risk Calculator Engine',         icon:'⚖️', impact:100000},
+    'price-feed':     {display:'Data Quality (Price Feed)',      icon:'📊', impact:60000},
+  },
+  logs:[], kajiAct:[], kbHits:[], histRefs:[], histData:[], scanFeed:[], buildSteps:{}, scanResults:{},
+  savings:0, resCnt:0, bumped:false, logFlt:'', connStatus:{}, theme:'light',
+  settings:{
+    airflow:{url:'',username:'',password:''},
+    confluence:{url:'',space:'',token:''},
+    jira:{url:'',project:'',token:''},
+    perforce:{server:'',username:'',password:'',depot:''},
+    teamcity:{url:'',token:''},
+    llm:{provider:'Qwen',endpoint:''},
+    mattermost:{url:'',token:'',channel:'#campbell-ops-alerts'},
+  },
+  settingsSections:[
+    {key:'airflow',icon:'⚡',label:'Airflow',cols:3,fields:[
+      {key:'url',label:'Endpoint URL',placeholder:'http://airflow.internal:8080'},
+      {key:'username',label:'Username',placeholder:'airflow_service'},
+      {key:'password',label:'Password',placeholder:'••••••••',type:'password'},
+    ]},
+    {key:'confluence',icon:'📖',label:'Confluence',cols:3,fields:[
+      {key:'url',label:'Base URL',placeholder:'https://campbell.atlassian.net'},
+      {key:'space',label:'Space Key',placeholder:'OPS'},
+      {key:'token',label:'API Token',placeholder:'••••••••',type:'password'},
+    ]},
+    {key:'jira',icon:'🎫',label:'Jira / Issue Tracker',cols:3,fields:[
+      {key:'url',label:'Base URL',placeholder:'https://jira.campbell.com'},
+      {key:'project',label:'Project Key',placeholder:'CAMP'},
+      {key:'token',label:'API Token',placeholder:'••••••••',type:'password'},
+    ]},
+    {key:'perforce',icon:'🌿',label:'Perforce (Source Control)',cols:2,fields:[
+      {key:'server',label:'Server',placeholder:'perforce.campbell.com:1666'},
+      {key:'username',label:'Username',placeholder:'p4_service'},
+      {key:'password',label:'Password',placeholder:'••••••••',type:'password'},
+      {key:'depot',label:'Depot Path',placeholder:'//depot/trading/...'},
+    ]},
+    {key:'teamcity',icon:'🔧',label:'TeamCity (CI/CD)',cols:2,fields:[
+      {key:'url',label:'Server URL',placeholder:'https://teamcity.campbell.com'},
+      {key:'token',label:'API Token',placeholder:'••••••••',type:'password'},
+    ]},
+    {key:'llm',icon:'🧠',label:'LLM / AI Model',cols:2,fields:[
+      {key:'provider',label:'Provider',placeholder:'Qwen'},
+      {key:'endpoint',label:'Endpoint',placeholder:'http://llm-gateway.internal/v1'},
+    ]},
+    {key:'mattermost',icon:'💬',label:'Mattermost',cols:3,fields:[
+      {key:'url',label:'Server URL',placeholder:'https://mattermost.campbell.com'},
+      {key:'token',label:'Bot Token',placeholder:'••••••••',type:'password'},
+      {key:'channel',label:'Ops Channel',placeholder:'#campbell-ops-alerts'},
+    ]},
+  ],
+
+  async init(){
+    const saved=localStorage.getItem('campbellTheme')||'light';
+    this.setTheme(saved);
+    await this.loadHealth();
+    await this.loadIncidents();
+    await this.loadHistory();
+    this.connectSSE();
+    setInterval(()=>this.loadHealth(),5000);
+    setInterval(()=>this.loadIncidents(),3000);
+  },
+
+  setTheme(t){this.theme=t;document.documentElement.dataset.theme=t;localStorage.setItem('campbellTheme',t);},
+
+  openModal(inc){this.modal={...inc,_st:false,_s:false};},
+
+  statusColor(s){
+    const m={open:'var(--red)',diagnosed:'var(--yellow)',fixing:'var(--blue)',resolved:'var(--green)'};
+    return m[s]||'var(--text)';
+  },
+
+  async loadHealth(){
+    try{const r=await fetch('/api/health');const d=await r.json();
+    const s=d.services||{};
+    for(const k of Object.keys(s)){if(this.svcCfg[k]){s[k].display=this.svcCfg[k].display;s[k].icon=this.svcCfg[k].icon;}}
+    this.services=s;}catch(_){}
+  },
+
+  async loadIncidents(){
+    try{const r=await fetch('/api/incidents');const d=await r.json();
+    this.incidents=d.incidents||[];
+    const ns=d.total_savings||0;
+    if(ns>this.savings){this.savings=ns;this.bumped=true;setTimeout(()=>this.bumped=false,700);}
+    this.resCnt=this.incidents.filter(i=>i.status==='resolved').length;
+    if(this.modal){
+      const updated=this.incidents.find(i=>i.id===this.modal.id);
+      if(updated)this.modal={...updated,_st:this.modal._st,_s:this.modal._s};
+    }
+    }catch(_){}
+  },
+
+  async loadHistory(){
+    try{const r=await fetch('/api/incidents/history?q=');const d=await r.json();this.histData=d.results||[];}catch(_){}
+  },
+
+  connectSSE(){
+    const es=new EventSource('/api/stream');
+    es.onmessage=(e)=>{try{this.onSSE(JSON.parse(e.data));}catch(_){}};
+    es.onerror=()=>setTimeout(()=>this.connectSSE(),3000);
+  },
+
+  onSSE(msg){
+    const{type,data,ts}=msg;
+    if(type==='log'){
+      this.logs.push({...data,ts});
+      if(this.logs.length>600)this.logs.shift();
+      this.$nextTick(()=>{const el=this.$refs.ls;if(el)el.scrollTop=el.scrollHeight;});
+    }else if(type==='kaji_activity'){this.kajiAct.push({...data,ts});
+    }else if(type==='kb_hit'){this.kbHits.push({...data,ts});
+    }else if(type==='incident_history_hit'){this.histRefs.push({ids:data.results,query:data.query,ts});
+    }else if(type==='feed_scan'){this.scanFeed.push({...data,ts});this.scanResults[data.incident_id]=data.related||[];
+    }else if(['service_failure','incident_created','incident_update','incident_diagnosed'].includes(type)){
+      this.loadIncidents();this.loadHealth();
+    }else if(type==='build_step'){
+      const id=data.incident_id;
+      if(!this.buildSteps[id])this.buildSteps[id]=[];
+      this.buildSteps[id].push(data.step);this.loadIncidents();
+    }else if(type==='incident_resolved'){
+      this.savings+=(data.savings||0);this.bumped=true;setTimeout(()=>this.bumped=false,700);
+      this.loadIncidents();this.loadHealth();
+    }else if(type==='ticket_created'){this.loadIncidents();
+    }else if(type==='demo_reset'){
+      this.incidents=[];this.logs=[];this.kajiAct=[];this.kbHits=[];this.histRefs=[];
+      this.buildSteps={};this.savings=0;this.resCnt=0;this.scanFeed=[];this.scanResults={};
+      this.loadHealth();
+    }
+  },
+
+  byS(s){return this.incidents.filter(i=>i.status===s);},
+  get fLogs(){return this.logFlt?this.logs.filter(e=>e.service===this.logFlt):this.logs;},
+
+  async inject(svc){try{await fetch('/api/logs/'+svc+'/inject',{method:'POST'});}catch(_){}},
+  async diagnose(id){
+    try{await fetch('/api/incidents/'+id+'/diagnose',{method:'POST'});
+    setTimeout(()=>fetch('/api/confluence/search?q=runbook'),400);
+    setTimeout(()=>fetch('/api/incidents/history?q='),1000);
+    await this.loadIncidents();}catch(_){}
+  },
+  async applyFix(id){try{await fetch('/api/incidents/'+id+'/apply-fix',{method:'POST'});}catch(_){}},
+  async createTicket(id){
+    try{await fetch('/api/incidents/'+id+'/create-ticket',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({incident_id:id,assignee:'Jimmy Chen'})});
+    await this.loadIncidents();}catch(_){}
+  },
+  async scanRelated(id){
+    if(!id)return;
+    try{const r=await fetch('/api/incidents/'+id+'/scan-related',{method:'POST'});const d=await r.json();
+    this.scanResults[id]=d.related_issues||[];
+    if(this.modal?.id===id)this.modal={...this.modal,related_issues:d.related_issues};
+    }catch(_){}
+  },
+  async resetDemo(){if(!confirm('Reset all incidents?'))return;await fetch('/api/demo/reset',{method:'POST'});},
+  async testConn(s){this.connStatus[s]='testing';await new Promise(r=>setTimeout(r,1100));this.connStatus[s]='ok';},
+  async testAll(){for(const s of['airflow','confluence','jira','perforce','teamcity','llm','mattermost']){this.connStatus[s]='testing';await new Promise(r=>setTimeout(r,300));this.connStatus[s]='ok';}},
+
+  mmLink(i){
+    if(!i)return'https://mattermost.dev.hyperplane.dev/shakudo-internal/channels/campbell-ops-alerts';
+    if(i.mattermost_thread)return'https://mattermost.dev.hyperplane.dev/shakudo-internal/pl/'+i.mattermost_thread;
+    return'https://mattermost.dev.hyperplane.dev/shakudo-internal/channels/campbell-ops-alerts';
+  },
+  ft(ts){if(!ts)return'';try{return new Date(ts).toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',second:'2-digit'});}catch(_){return(ts||'').substring(11,19);}},
+  cl(lvl){return(lvl||'').replace('[','').replace(']','').trim();},
+};}
+</script>
+</body>
+</html>

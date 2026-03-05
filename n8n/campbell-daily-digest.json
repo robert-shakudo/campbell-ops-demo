@@ -1,0 +1,62 @@
+{
+  "name": "Campbell Daily Ops Digest",
+  "active": true,
+  "nodes": [
+    {
+      "id": "d1",
+      "name": "Daily 9am UTC",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [240, 300],
+      "parameters": {
+        "rule": {"interval": [{"field": "cronExpression","expression": "0 9 * * *"}]}
+      }
+    },
+    {
+      "id": "d2",
+      "name": "Get Incidents",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [460, 280],
+      "parameters": {
+        "method": "GET",
+        "url": "https://campbell-ops-demo.dev.hyperplane.dev/api/incidents"
+      }
+    },
+    {
+      "id": "d3",
+      "name": "Get Health",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [460, 380],
+      "parameters": {
+        "method": "GET",
+        "url": "https://campbell-ops-demo.dev.hyperplane.dev/api/health"
+      }
+    },
+    {
+      "id": "d4",
+      "name": "Post Daily Digest",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [700, 300],
+      "parameters": {
+        "method": "POST",
+        "url": "https://mattermost.dev.hyperplane.dev/api/v4/posts",
+        "sendHeaders": true,
+        "headerParameters": {"parameters": [{"name": "Authorization","value": "Bearer 3rn39b5hj7d4pyuytc46gudw6h"}]},
+        "sendBody": true,
+        "contentType": "json",
+        "bodyParameters": {"parameters": [
+          {"name": "channel_id","value": "cw5wxp5wajrz5nkc1yeqyxbazc"},
+          {"name": "message","value": "📊 **Campbell Ops Daily Digest**\\n\\nGood morning. 24-hour infrastructure summary as of {{ new Date().toDateString() }}\\n\\n**Services**\\n{{ Object.entries($('Get Health').item.json.services).map(([k,v])=>(v.healthy?'✅':'🔴')+' '+v.display).join('\\n') }}\\n\\n**Total savings this month:** ${{ $('Get Incidents').item.json.total_savings?.toLocaleString()||'0' }}\\n\\nFull dashboard: https://campbell-ops-demo.dev.hyperplane.dev"}
+        ]}
+      }
+    }
+  ],
+  "connections": {
+    "Daily 9am UTC": {"main": [[{"node": "Get Incidents","type": "main","index": 0}]]},
+    "Get Incidents": {"main": [[{"node": "Get Health","type": "main","index": 0}]]},
+    "Get Health": {"main": [[{"node": "Post Daily Digest","type": "main","index": 0}]]}
+  }
+}

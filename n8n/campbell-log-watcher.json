@@ -1,0 +1,63 @@
+{
+  "name": "Campbell Log Watcher",
+  "active": true,
+  "nodes": [
+    {
+      "id": "n1",
+      "name": "Every 5 Minutes",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [240, 300],
+      "parameters": {
+        "rule": {"interval": [{"field": "minutes", "minutesInterval": 5}]}
+      }
+    },
+    {
+      "id": "n2",
+      "name": "Get Latest Errors",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [460, 300],
+      "parameters": {
+        "method": "GET",
+        "url": "https://campbell-ops-demo.dev.hyperplane.dev/api/logs/all/latest-errors"
+      }
+    },
+    {
+      "id": "n3",
+      "name": "Has Errors?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [680, 300],
+      "parameters": {
+        "conditions": {
+          "conditions": [{"id": "c1","leftValue": "={{ $json.count }}","rightValue": 0,"operator": {"type": "number","operation": "gt"}}]
+        }
+      }
+    },
+    {
+      "id": "n4",
+      "name": "Alert Mattermost",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [900, 240],
+      "parameters": {
+        "method": "POST",
+        "url": "https://mattermost.dev.hyperplane.dev/api/v4/posts",
+        "sendHeaders": true,
+        "headerParameters": {"parameters": [{"name": "Authorization","value": "Bearer 3rn39b5hj7d4pyuytc46gudw6h"}]},
+        "sendBody": true,
+        "contentType": "json",
+        "bodyParameters": {"parameters": [
+          {"name": "channel_id","value": "cw5wxp5wajrz5nkc1yeqyxbazc"},
+          {"name": "message","value": "={{ '🔍 **Campbell Log Watcher** — ' + $json.count + ' active failure(s)\\n' + ($json.errors||[]).map(e=>'🔴 **['+e.display+']** `'+e.error.substring(0,80)+'` | $'+(e.impact||0).toLocaleString()+' at risk').join('\\n') }}"}
+        ]}
+      }
+    }
+  ],
+  "connections": {
+    "Every 5 Minutes": {"main": [[{"node": "Get Latest Errors","type": "main","index": 0}]]},
+    "Get Latest Errors": {"main": [[{"node": "Has Errors?","type": "main","index": 0}]]},
+    "Has Errors?": {"main": [[{"node": "Alert Mattermost","type": "main","index": 0}], []]}
+  }
+}
