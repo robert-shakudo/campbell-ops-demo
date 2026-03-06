@@ -1346,6 +1346,132 @@ async def get_all_latest_errors():
     return {"errors": errors, "count": len(errors), "ts": datetime.utcnow().isoformat()}
 
 
+WIKIPEDIA_TOPICS = {
+    "airflow": ["Apache Airflow", "Extract, transform, load", "Pipeline (computing)"],
+    "bloomberg": ["Bloomberg Terminal", "Financial data vendor", "Market data"],
+    "teamcity": ["Continuous integration", "Unit testing", "Test automation"],
+    "risk-calculator": ["Value at risk", "Market risk", "Financial risk management"],
+    "price-feed": ["Market data", "Data quality", "Financial market"],
+}
+
+
+@app.get("/api/public-kb/search")
+async def public_kb_search(q: str = "", service: Optional[str] = None):
+    results = []
+    try:
+        search_url = "https://en.wikipedia.org/w/api.php"
+        async with httpx.AsyncClient(timeout=8) as client:
+            r = await client.get(
+                search_url,
+                params={
+                    "action": "query",
+                    "list": "search",
+                    "srsearch": q,
+                    "srlimit": 3,
+                    "format": "json",
+                    "srprop": "snippet|titlesnippet",
+                },
+            )
+            if r.status_code == 200:
+                items = r.json().get("query", {}).get("search", [])
+                for item in items:
+                    snippet = (
+                        item.get("snippet", "")
+                        .replace('<span class="searchmatch">', "**")
+                        .replace("</span>", "**")
+                    )
+                    results.append(
+                        {
+                            "id": item.get("pageid"),
+                            "title": item.get("title", ""),
+                            "excerpt": snippet[:200],
+                            "url": f"https://en.wikipedia.org/wiki/{item.get('title', '').replace(' ', '_')}",
+                            "source": "Wikipedia",
+                        }
+                    )
+    except Exception as e:
+        log.warning(f"Wikipedia search failed: {e}")
+    if service and not results:
+        topics = WIKIPEDIA_TOPICS.get(service, [])
+        results = [
+            {
+                "title": t,
+                "url": f"https://en.wikipedia.org/wiki/{t.replace(' ', '_')}",
+                "source": "Wikipedia",
+            }
+            for t in topics[:2]
+        ]
+    db_execute(
+        "INSERT INTO campbell_kaji_activity(tool, params, summary) VALUES(%s,%s,%s)",
+        [
+            "search_public_kb",
+            json.dumps({"query": q, "source": "Wikipedia"}),
+            f"Wikipedia search: '{q}' → {len(results)} results",
+        ],
+    )
+    await broadcast(
+        "kaji_activity",
+        {
+            "tool": "search_public_kb",
+            "summary": f"Wikipedia: '{q}' → {len(results)} results",
+        },
+    )
+    await broadcast(
+        "kb_hit",
+        {
+            "page_id": "wiki",
+            "title": f"Wikipedia: {q}",
+            "space": "PUBLIC",
+            "results": results,
+        },
+    )
+    return {
+        "query": q,
+        "results": results,
+        "source": "Wikipedia",
+        "count": len(results),
+    }
+
+
+@app.get("/api/public-kb/article")
+async def get_wiki_article(title: str):
+    try:
+        url = f"https://en.wikipedia.org/api/rest_v1/page/summary/{title.replace(' ', '_')}"
+        async with httpx.AsyncClient(timeout=8) as client:
+            r = await client.get(url)
+            if r.status_code == 200:
+                data = r.json()
+                result = {
+                    "title": data.get("title"),
+                    "description": data.get("description", ""),
+                    "extract": data.get("extract", "")[:500],
+                    "url": data.get("content_urls", {})
+                    .get("desktop", {})
+                    .get("page", ""),
+                    "thumbnail": data.get("thumbnail", {}).get("source", ""),
+                    "source": "Wikipedia",
+                }
+                await broadcast(
+                    "kaji_activity",
+                    {
+                        "tool": "read_public_kb_article",
+                        "summary": f"Read Wikipedia: {data.get('title')}",
+                    },
+                )
+                await broadcast(
+                    "kb_hit",
+                    {
+                        "page_id": f"wiki-{title}",
+                        "title": data.get("title"),
+                        "space": "PUBLIC",
+                    },
+                )
+                return result
+    except Exception as e:
+        log.warning(f"Wikipedia article failed: {e}")
+    raise HTTPException(404, f"Article not found: {title}")
+
+
 @app.get("/api/confluence/search")
 async def confluence_search(q: str = ""):
     results = []
@@ -1610,6 +1736,50 @@ async def simulate_diagnosis_flow(incident_id: str, service: str):
             {"tool": "read_confluence_page", "summary": f"Read: {conf_title}"},
         )
         await asyncio.sleep(1.5)
+
+    await asyncio.sleep(0.8)
+    wiki_queries = {
+        "airflow": "Apache Airflow ETL pipeline",
+        "bloomberg": "Bloomberg Terminal financial data API",
+        "teamcity": "continuous integration testing",
+        "risk-calculator": "Value at risk portfolio risk management",
+        "price-feed": "financial data quality validation",
+    }
+    wiki_q = wiki_queries.get(service, f"{service} operations")
+    emit_step(f"🌐 Searching public KB: '{wiki_q}'...", "search_public_kb")
+    try:
+        async with httpx.AsyncClient(timeout=6) as client:
+            wiki_r = await client.get(
+                "https://en.wikipedia.org/w/api.php",
+                params={
+                    "action": "query",
+                    "list": "search",
+                    "srsearch": wiki_q,
+                    "srlimit": 2,
+                    "format": "json",
+                },
+            )
+            if wiki_r.status_code == 200:
+                for item in wiki_r.json().get("query", {}).get("search", [])[:2]:
+                    wiki_title = item.get("title", "")
+                    await broadcast(
+                        "kb_hit",
+                        {
+                            "page_id": f"wiki-{item.get('pageid')}",
+                            "title": wiki_title,
+                            "space": "WIKIPEDIA",
+                        },
+                    )
+                    await broadcast(
+                        "kaji_activity",
+                        {
+                            "tool": "search_public_kb",
+                            "summary": f"Wikipedia: {wiki_title}",
+                        },
+                    )
+    except Exception as e:
+        log.warning(f"Wikipedia step failed: {e}")
+    await asyncio.sleep(1)
 
     hist = cfg.get("historical_incident", "")
     if hist:

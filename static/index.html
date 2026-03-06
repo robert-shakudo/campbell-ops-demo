@@ -593,12 +593,15 @@ nav{background:var(--nav-bg);border-bottom:1px solid rgba(255,255,255,0.08);back
               <div class="text-xs" style="color:var(--text-2);">Found <span x-text="s.count"></span> related issues</div>
             </div>
           </template>
-          <template x-for="(h,i) in kbHits.slice(-12).reverse()" :key="i">
-            <div class="kbhit mb-2">
-              <div class="text-xs font-semibold" style="color:var(--blue);" x-text="h.title"></div>
-              <div class="text-xs" style="color:var(--muted);" x-text="'Space: '+h.space+' · '+ft(h.ts)"></div>
-            </div>
-          </template>
+           <template x-for="(h,i) in kbHits.slice(-15).reverse()" :key="i">
+             <div class="kbhit mb-2">
+               <div class="flex items-center gap-2">
+                 <span class="text-xs px-1.5 py-0.5 rounded font-bold" :style="h.space==='WIKIPEDIA'?'background:rgba(59,130,246,0.12);color:var(--blue)':'background:rgba(148,150,252,0.12);color:var(--secondary)'" x-text="h.space==='WIKIPEDIA'?'🌐 WIKI':'📖 CONF'"></span>
+                 <span class="text-xs font-semibold" style="color:var(--text-2);" x-text="h.title"></span>
+               </div>
+               <div class="text-xs" style="color:var(--muted);" x-text="h.space+' · '+ft(h.ts)"></div>
+             </div>
+           </template>
           <div x-show="kbHits.length===0 && scanFeed.length===0" class="text-center py-4 text-xs" style="color:var(--muted);">No KB lookups yet</div>
         </div>
       </div>
