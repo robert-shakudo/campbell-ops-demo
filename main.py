@@ -1780,7 +1780,7 @@ async def request_review(incident_id: str):
     }
     post_id = None
     n8n_execution_id = None
-    n8n_wf3_url = "http://n8n-v2.hyperplane-n8n-v2.svc.cluster.local:80/webhook/campbell-code-review"
+    n8n_wf3_url = "http://n8n-v2.hyperplane-n8n-v2.svc.cluster.local:80/webhook-test/campbell-code-review"
     n8n_payload = {
         "incident_id": incident_id,
         "service": service,
