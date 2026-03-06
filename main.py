@@ -22,7 +22,12 @@ import psycopg2.extras
 import uvicorn
 from fastapi import BackgroundTasks, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
+from fastapi.responses import (
+    FileResponse,
+    HTMLResponse,
+    JSONResponse,
+    StreamingResponse,
+)
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
@@ -1694,8 +1699,8 @@ async def request_review(incident_id: str):
     inc = dict(row[0])
     service = inc["service"]
     cfg = SERVICES_CONFIG.get(service, {})
-    approve_url = f"{WEBHOOK_BASE}/api/webhooks/approve/{incident_id}"
-    reject_url = f"{WEBHOOK_BASE}/api/webhooks/reject/{incident_id}"
+    approve_url = f"{DEMO_URL}/approve/{incident_id}"
+    reject_url = f"{DEMO_URL}/reject/{incident_id}"
     diff_text = cfg.get("fix_diff", "no diff available")
     review_text = (
         f"🔍 **Code Review Required — {cfg.get('display', service)}**\n\n"
@@ -1774,6 +1779,44 @@ async def request_review(incident_id: str):
         },
     }
     post_id = None
+    n8n_execution_id = None
+    n8n_wf3_url = "http://n8n-v2.hyperplane-n8n-v2.svc.cluster.local:80/webhook/campbell-code-review"
+    n8n_payload = {
+        "incident_id": incident_id,
+        "service": service,
+        "display": cfg.get("display", service),
+        "error": cfg.get("error", ""),
+        "impact": cfg.get("impact", 0),
+        "root_cause": cfg.get("root_cause", ""),
+        "fix_diff": cfg.get("fix_diff", ""),
+        "source_file": cfg.get("source_file", ""),
+        "source_line": cfg.get("source_line", ""),
+        "historical_incident": cfg.get("historical_incident", ""),
+        "approve_url": approve_url,
+        "reject_url": reject_url,
+    }
+    try:
+        async with httpx.AsyncClient(timeout=6) as client:
+            n8n_r = await client.post(n8n_wf3_url, json=n8n_payload)
+            if n8n_r.status_code in (200, 201):
+                n8n_execution_id = str(n8n_r.json().get("executionId", ""))
+                log_audit(
+                    "n8n_wf3_triggered",
+                    {"execution_id": n8n_execution_id},
+                    source="n8n",
+                    incident_id=incident_id,
+                )
+                await broadcast(
+                    "audit",
+                    {
+                        "event_type": "n8n_wf3_triggered",
+                        "description": f"n8n WF3 triggered for {cfg.get('display', service)}",
+                        "source": "n8n",
+                        "ts": datetime.utcnow().isoformat(),
+                    },
+                )
+    except Exception as e:
+        log.warning(f"n8n WF3 trigger failed (using direct MM): {e}")
     try:
         async with httpx.AsyncClient(timeout=10) as client:
             r = await client.post(
@@ -1805,7 +1848,11 @@ async def request_review(incident_id: str):
         "UPDATE campbell_incidents SET status='review_pending', updated_at=NOW() WHERE id=%s",
         [incident_id],
     )
-    return {"status": "review_requested", "mattermost_post": post_id}
+    return {
+        "status": "review_requested",
+        "mattermost_post": post_id,
+        "n8n_execution": n8n_execution_id,
+    }
 
 
 @app.post("/api/webhooks/approve/{incident_id}")
@@ -2337,6 +2384,101 @@ async def skill_md():
     if skill_path.exists():
         return FileResponse(skill_path, media_type="text/markdown")
     raise HTTPException(404, "SKILL.md not found")
+
+
+@app.get("/approve/{incident_id}", response_class=HTMLResponse)
+async def approve_page(incident_id: str, bg: BackgroundTasks):
+    row = db_execute(
+        "SELECT * FROM campbell_incidents WHERE id=%s", [incident_id], fetch=True
+    )
+    if not row:
+        return HTMLResponse(
+            "<html><body style='font-family:system-ui;padding:40px;background:#0A1628;color:#E2E8F0'><h2>❌ Incident not found</h2><p>This approval link may have expired.</p></body></html>",
+            status_code=404,
+        )
+    inc = dict(row[0])
+    if inc.get("status") in ("resolved",):
+        return HTMLResponse(
+            f"<html><body style='font-family:system-ui;padding:40px;background:#0A1628;color:#E2E8F0;text-align:center'><div style='max-width:500px;margin:0 auto;padding:40px;background:#112038;border-radius:12px;border:1px solid #1E3A5F'><div style='font-size:3rem;margin-bottom:16px'>✅</div><h2 style='color:#22C55E;margin-bottom:8px'>Already Resolved</h2><p style='color:#94A3B8'>This incident has already been resolved.</p><a href='{DEMO_URL}' style='display:inline-block;margin-top:24px;padding:12px 24px;background:#C9A84C;color:#0A1628;border-radius:6px;text-decoration:none;font-weight:700'>View Dashboard</a></div></body></html>"
+        )
+    service = inc["service"]
+    cfg = SERVICES_CONFIG.get(service, {})
+    bg.add_task(simulate_fix_flow, incident_id, service)
+    log_audit(
+        "mm_button_approve",
+        {"incident_id": incident_id, "source": "browser_link"},
+        service=service,
+        incident_id=incident_id,
+        source="mattermost_link",
+        actor="Jimmy Chen",
+    )
+    await broadcast(
+        "audit",
+        {
+            "event_type": "mm_button_approve",
+            "description": "✅ Jimmy Chen approved fix via Mattermost link",
+            "source": "Mattermost",
+            "actor": "Jimmy Chen",
+            "ts": datetime.utcnow().isoformat(),
+        },
+    )
+    return HTMLResponse(f"""<html><head><meta http-equiv="refresh" content="3;url={DEMO_URL}"></head>
+<body style='font-family:system-ui;padding:40px;background:#0A1628;color:#E2E8F0;text-align:center'>
+<div style='max-width:500px;margin:0 auto;padding:40px;background:#112038;border-radius:12px;border:1px solid #22C55E'>
+<div style='font-size:3rem;margin-bottom:16px'>✅</div>
+<h2 style='color:#22C55E;margin-bottom:8px'>Fix Approved!</h2>
+<p style='color:#94A3B8;margin-bottom:4px'>Applying fix to <strong style='color:#E2E8F0'>{cfg.get("display", service)}</strong></p>
+<p style='color:#94A3B8;margin-bottom:24px'>Build running... redirecting to dashboard in 3 seconds.</p>
+<a href='{DEMO_URL}' style='display:inline-block;padding:12px 24px;background:#C9A84C;color:#0A1628;border-radius:6px;text-decoration:none;font-weight:700'>View Dashboard →</a>
+</div></body></html>""")
+
+
+@app.get("/reject/{incident_id}", response_class=HTMLResponse)
+async def reject_page(incident_id: str):
+    row = db_execute(
+        "SELECT * FROM campbell_incidents WHERE id=%s", [incident_id], fetch=True
+    )
+    if not row:
+        return HTMLResponse(
+            "<html><body style='font-family:system-ui;padding:40px'>❌ Incident not found</body></html>",
+            status_code=404,
+        )
+    inc = dict(row[0])
+    service = inc["service"]
+    db_execute(
+        "UPDATE campbell_incidents SET status='diagnosed', updated_at=NOW() WHERE id=%s",
+        [incident_id],
+    )
+    await post_mattermost(
+        f"❌ **Fix rejected** — incident back to diagnosed state. @kaji will suggest an alternative approach."
+    )
+    await broadcast("incident_update", {"id": incident_id, "status": "diagnosed"})
+    log_audit(
+        "mm_button_reject",
+        {"incident_id": incident_id},
+        service=service,
+        incident_id=incident_id,
+        source="mattermost_link",
+        actor="Jimmy Chen",
+    )
+    await broadcast(
+        "audit",
+        {
+            "event_type": "mm_button_reject",
+            "description": "❌ Jimmy Chen rejected fix via Mattermost link",
+            "source": "Mattermost",
+            "actor": "Jimmy Chen",
+            "ts": datetime.utcnow().isoformat(),
+        },
+    )
+    return HTMLResponse(f"""<html><head><meta http-equiv="refresh" content="3;url={DEMO_URL}"></head>
+<body style='font-family:system-ui;padding:40px;background:#0A1628;color:#E2E8F0;text-align:center'>
+<div style='max-width:500px;margin:0 auto;padding:40px;background:#112038;border-radius:12px;border:1px solid #EF4444'>
+<div style='font-size:3rem;margin-bottom:16px'>❌</div>
+<h2 style='color:#EF4444;margin-bottom:8px'>Fix Rejected</h2>
+<p style='color:#94A3B8;margin-bottom:24px'>Kaji will suggest an alternative approach. Redirecting in 3 seconds.</p>
+<a href='{DEMO_URL}' style='display:inline-block;padding:12px 24px;background:#C9A84C;color:#0A1628;border-radius:6px;text-decoration:none;font-weight:700'>View Dashboard →</a>
+</div></body></html>""")
 
 
 @app.get("/{path:path}")

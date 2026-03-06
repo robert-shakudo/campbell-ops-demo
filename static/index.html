@@ -92,8 +92,8 @@ nav{background:var(--nav-bg);border-bottom:1px solid rgba(255,255,255,0.08);back
 .s-lbl{font-size:.67rem;color:var(--muted);font-weight:700;letter-spacing:.08em;text-transform:uppercase;margin-bottom:4px;display:block;}
 .conn-btn{font-size:.75rem;padding:7px 14px;border-radius:6px;font-weight:600;background:var(--surface-2);border:1px solid var(--border);color:var(--muted);cursor:pointer;transition:all .15s;}
 .conn-btn:hover{border-color:var(--primary);color:var(--primary);}
-.modal-overlay{position:fixed;inset:0;z-index:60;display:flex;align-items:center;justify-content:center;padding:24px;background:rgba(0,0,0,0.65);backdrop-filter:blur(4px);}
-.modal-box{background:var(--surface);border:1px solid var(--border);border-radius:14px;width:100%;max-width:920px;max-height:92vh;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 24px 80px var(--shadow-lg);}
+.modal-overlay{position:fixed;inset:0;z-index:60;display:flex;align-items:center;justify-content:center;padding:24px;background:rgba(0,0,0,0.65);}
+.modal-box{background:var(--surface);border:1px solid var(--border);border-radius:14px;width:100%;max-width:920px;max-height:92vh;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 24px 80px var(--shadow-lg);will-change:transform;transform:translateZ(0);}
 .modal-hdr{padding:16px 22px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-shrink:0;}
 .modal-body{overflow-y:auto;flex:1;padding:22px;}
 .modal-body::-webkit-scrollbar{width:4px;}
@@ -133,8 +133,9 @@ nav{background:var(--nav-bg);border-bottom:1px solid rgba(255,255,255,0.08);back
 @keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
 .bump{animation:bump .6s ease;}
 @keyframes bump{0%{transform:scale(1)}50%{transform:scale(1.1)}100%{transform:scale(1)}}
-.fi{animation:fi .25s ease;}
-@keyframes fi{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+.fi{animation:fi .2s ease;}
+@keyframes fi{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:translateY(0)}}
+.no-fi{animation:none !important;}
 </style>
 </head>
 <body x-data="app()" x-init="init()" @keydown.escape.window="closeModal()">
@@ -680,7 +681,7 @@ nav{background:var(--nav-bg);border-bottom:1px solid rgba(255,255,255,0.08);back
         No audit events yet. Inject a failure and run through the demo flow to populate this timeline.
       </div>
       <template x-for="(entry, i) in filteredAudit" :key="entry.id||i">
-        <div class="flex gap-3 mb-4 fi">
+        <div class="flex gap-3 mb-4">
           <!-- Timeline line -->
           <div class="flex flex-col items-center">
             <div class="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 text-sm"
@@ -881,7 +882,7 @@ function app(){return{
   },
 
   closeModal(){
-    this.closeModal();
+    this.modal=null;
     document.body.style.overflow='';
   },
 
@@ -904,16 +905,23 @@ function app(){return{
   async loadIncidents(){
     try{
       const r=await fetch('/api/incidents');const d=await r.json();
-      this.incidents=d.incidents||[];
+      const newIncs=d.incidents||[];
+      this.incidents=newIncs;
       const ns=d.total_savings||0;
       if(ns>this.savings){this.savings=ns;this.bumped=true;setTimeout(()=>this.bumped=false,700);}
-      this.resCnt=this.incidents.filter(i=>i.status==='resolved').length;
+      this.resCnt=newIncs.filter(i=>i.status==='resolved').length;
       if(this.modal){
-        const up=this.incidents.find(i=>i.id===this.modal.id);
-        if(up){
+        const up=newIncs.find(i=>i.id===this.modal.id);
+        if(up && up.status!==this.modal.status){
           const _st=this.modal._st, _s=this.modal._s;
+          this.modal=null;
+          this.$nextTick(()=>{this.modal={...up,_st,_s};});
+        } else if(up) {
+          const _st=this.modal._st, _s=this.modal._s;
+          const prevRelated=this.modal.related_issues;
           Object.assign(this.modal, up);
           this.modal._st=_st; this.modal._s=_s;
+          if(prevRelated) this.modal.related_issues=prevRelated;
         }
       }
     }catch(_){}
@@ -991,9 +999,14 @@ function app(){return{
   },
   async scanRelated(id){
     if(!id)return;
-    try{const r=await fetch('/api/incidents/'+id+'/scan-related',{method:'POST'});const d=await r.json();
-    this.scanResults[id]=d.related_issues||[];
-    if(this.modal?.id===id)if(this.modal){Object.assign(this.modal, {related_issues:d.related_issues});}
+    try{
+      const r=await fetch('/api/incidents/'+id+'/scan-related',{method:'POST'});
+      const d=await r.json();
+      const results=d.related_issues||[];
+      this.scanResults={...this.scanResults,[id]:results};
+      if(this.modal && this.modal.id===id){
+        this.modal={...this.modal,related_issues:results,_st:this.modal._st,_s:this.modal._s};
+      }
     }catch(_){}
   },
   async resetDemo(){if(!confirm('Reset all incidents?'))return;await fetch('/api/demo/reset',{method:'POST'});},
