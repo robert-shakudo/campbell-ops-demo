@@ -47,7 +47,10 @@ CLICKUP_TOKEN = os.getenv(
     "CLICKUP_TOKEN", "pk_150142682_TO57FJP04N2FUC2QSTYA28PBZL8QGN3V"
 )
 DEMO_URL = os.getenv("DEMO_URL", "https://campbell-ops-demo.dev.hyperplane.dev")
-WEBHOOK_BASE = os.getenv("CAMPBELL_INTERNAL_URL", DEMO_URL)
+_CAMPBELL_INTERNAL_DEFAULT = (
+    "http://hyperplane-service-e400e4.hyperplane-pipelines.svc.cluster.local:8787"
+)
+WEBHOOK_BASE = os.getenv("CAMPBELL_INTERNAL_URL", _CAMPBELL_INTERNAL_DEFAULT)
 N8N_KEY = os.getenv(
     "N8N_API_KEY",
     "",
@@ -1694,9 +1697,21 @@ async def request_review(incident_id: str):
     approve_url = f"{WEBHOOK_BASE}/api/webhooks/approve/{incident_id}"
     reject_url = f"{WEBHOOK_BASE}/api/webhooks/reject/{incident_id}"
     diff_text = cfg.get("fix_diff", "no diff available")
+    review_text = (
+        f"🔍 **Code Review Required — {cfg.get('display', service)}**\n\n"
+        f"**Error**: `{cfg.get('error', '')[:80]}`\n"
+        f"**File**: `{cfg.get('source_file', '')}:{cfg.get('source_line', '')}`\n"
+        f"**Root Cause**: {cfg.get('root_cause', '')[:200]}\n\n"
+        f"```diff\n{diff_text}\n```\n\n"
+        f"💰 **${cfg.get('impact', 0):,}** at risk | Risk: ⚠️ High — Production trading infrastructure\n"
+        f"Ref: **{cfg.get('historical_incident', 'N/A')}**\n\n"
+        f"---\n"
+        f"**[✅ Approve & Apply]({approve_url})** · **[❌ Reject — Retry]({reject_url})**\n\n"
+        f'_"Kaji finds the fix. You hold the key. Nobody touched a server without sign-off."_'
+    )
     msg_payload: Dict[str, Any] = {
         "channel_id": MM_CHANNEL_ID,
-        "message": f"🔍 **Code Review Required** — {cfg.get('display', service)}",
+        "message": review_text,
         "props": {
             "attachments": [
                 {
@@ -1714,33 +1729,13 @@ async def request_review(incident_id: str):
                             "short": True,
                         },
                         {
-                            "title": "Error",
-                            "value": f"`{cfg.get('error', '')[:80]}`",
-                            "short": False,
-                        },
-                        {
-                            "title": "Root Cause",
-                            "value": cfg.get("root_cause", "")[:200],
-                            "short": False,
-                        },
-                        {
-                            "title": "Risk Level",
-                            "value": "⚠️ **High** — Production trading infrastructure",
-                            "short": True,
-                        },
-                        {
-                            "title": "Ref",
-                            "value": cfg.get("historical_incident", "N/A"),
-                            "short": True,
-                        },
-                        {
-                            "title": "Proposed Patch",
-                            "value": f"```diff\n{diff_text}\n```",
-                            "short": False,
-                        },
-                        {
                             "title": "Business Impact",
                             "value": f"💰 **${cfg.get('impact', 0):,}** at risk",
+                            "short": True,
+                        },
+                        {
+                            "title": "Historical Ref",
+                            "value": cfg.get("historical_incident", "N/A"),
                             "short": True,
                         },
                     ],
@@ -1748,6 +1743,8 @@ async def request_review(incident_id: str):
                         {
                             "id": "approve",
                             "name": "✅ Approve & Apply",
+                            "type": "button",
+                            "style": "good",
                             "integration": {
                                 "url": approve_url,
                                 "context": {
@@ -1760,6 +1757,8 @@ async def request_review(incident_id: str):
                         {
                             "id": "reject",
                             "name": "❌ Reject — Retry",
+                            "type": "button",
+                            "style": "danger",
                             "integration": {
                                 "url": reject_url,
                                 "context": {
@@ -2370,7 +2369,7 @@ async def startup():
 async def setup_n8n_workflows():
     await asyncio.sleep(5)
     n8n_internal = os.getenv(
-        "N8N_INTERNAL_URL", "http://n8n-v2.hyperplane-n8n-v2.svc.cluster.local:5678"
+        "N8N_INTERNAL_URL", "http://n8n-v2.hyperplane-n8n-v2.svc.cluster.local:80"
     )
     n8n_key = N8N_KEY
     demo_url = (
