@@ -1047,9 +1047,9 @@ async def simulate_log_activity():
         ],
     }
     while True:
-        await asyncio.sleep(3)
+        await asyncio.sleep(8)
         for svc, logs in HEALTHY_LOGS.items():
-            if service_failures[svc] is None:  # Only emit healthy logs when no failure
+            if service_failures[svc] is None:
                 level, msg = random.choice(logs)
                 await broadcast_log(svc, level, msg)
 
@@ -2701,15 +2701,52 @@ async def approve_page(incident_id: str, bg: BackgroundTasks):
             "ts": datetime.utcnow().isoformat(),
         },
     )
-    return HTMLResponse(f"""<html><head><meta http-equiv="refresh" content="3;url={DEMO_URL}"></head>
-<body style='font-family:system-ui;padding:40px;background:#0A1628;color:#E2E8F0;text-align:center'>
-<div style='max-width:500px;margin:0 auto;padding:40px;background:#112038;border-radius:12px;border:1px solid #22C55E'>
-<div style='font-size:3rem;margin-bottom:16px'>✅</div>
-<h2 style='color:#22C55E;margin-bottom:8px'>Fix Approved!</h2>
-<p style='color:#94A3B8;margin-bottom:4px'>Applying fix to <strong style='color:#E2E8F0'>{cfg.get("display", service)}</strong></p>
-<p style='color:#94A3B8;margin-bottom:24px'>Build running... redirecting to dashboard in 3 seconds.</p>
-<a href='{DEMO_URL}' style='display:inline-block;padding:12px 24px;background:#C9A84C;color:#0A1628;border-radius:6px;text-decoration:none;font-weight:700'>View Dashboard →</a>
-</div></body></html>""")
+    return HTMLResponse(f"""<!DOCTYPE html>
+<html><head><title>Fix Approved — Campbell Ops</title>
+<style>
+body{{margin:0;padding:0;background:#0A1628;color:#E2E8F0;font-family:'Inter',system-ui,sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh;}}
+.card{{max-width:480px;width:90%;padding:40px;background:#112038;border-radius:14px;border:1px solid #22C55E;text-align:center;box-shadow:0 24px 80px rgba(0,0,0,0.5);}}
+.icon{{font-size:3rem;margin-bottom:16px;}}
+h2{{color:#22C55E;margin:0 0 8px;font-size:1.6rem;}}
+p{{color:#94A3B8;margin:0 0 8px;line-height:1.5;}}
+.svc{{color:#E2E8F0;font-weight:700;}}
+.steps{{background:#0F2040;border-radius:8px;padding:16px;margin:20px 0;text-align:left;}}
+.step{{display:flex;align-items:center;gap:8px;font-size:.82rem;color:#94A3B8;padding:4px 0;}}
+.step.done{{color:#22C55E;}}
+.step.running{{color:#60A5FA;}}
+.btn{{display:inline-block;margin-top:20px;padding:12px 28px;background:#C9A84C;color:#0A1628;border-radius:6px;text-decoration:none;font-weight:700;font-size:.9rem;}}
+.counter{{font-size:.8rem;color:#94A3B8;margin-top:12px;}}
+#countdown{{color:#E2E8F0;font-weight:700;}}
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="icon">✅</div>
+  <h2>Fix Approved!</h2>
+  <p>Applying fix to <span class="svc">{cfg.get("display", service)}</span></p>
+  <div class="steps">
+    <div class="step done">✓ Approval received</div>
+    <div class="step done">✓ Patch applied to <code>{cfg.get("fix_file", "")}</code></div>
+    <div class="step running">⚙ Build running: {cfg.get("build_name", "")}</div>
+    <div class="step" id="step-resolve">⏳ Waiting for CI to complete...</div>
+  </div>
+  <p style="color:#C9A84C;font-weight:700;font-size:1.1rem;">💰 ${cfg.get("impact", 0):,} savings locked in</p>
+  <a href="{DEMO_URL}" class="btn">View Dashboard →</a>
+  <p class="counter">Auto-redirecting in <span id="countdown">15</span>s</p>
+</div>
+<script>
+let t = 15;
+const cd = document.getElementById('countdown');
+const sr = document.getElementById('step-resolve');
+const iv = setInterval(() => {{
+  t--;
+  if(cd) cd.textContent = t;
+  if(t <= 8 && sr) {{ sr.className='step running'; sr.textContent='⚙ Tests passing...'; }}
+  if(t <= 3 && sr) {{ sr.className='step done'; sr.textContent='✓ Build PASSED — deployed'; }}
+  if(t <= 0) {{ clearInterval(iv); window.location.href = '{DEMO_URL}'; }}
+}}, 1000);
+</script>
+</body></html>""")
 
 
 @app.get("/reject/{incident_id}", response_class=HTMLResponse)

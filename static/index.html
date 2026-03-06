@@ -95,7 +95,7 @@ nav{background:var(--nav-bg);border-bottom:1px solid rgba(255,255,255,0.08);back
 .modal-overlay{position:fixed;inset:0;z-index:60;display:flex;align-items:center;justify-content:center;padding:24px;background:rgba(0,0,0,0.65);}
 .modal-box{background:var(--surface);border:1px solid var(--border);border-radius:14px;width:100%;max-width:960px;max-height:95vh;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 24px 80px var(--shadow-lg);will-change:transform;transform:translateZ(0);}
 .modal-hdr{padding:14px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-shrink:0;}
-.modal-body{overflow-y:scroll;overflow-x:hidden;flex:1;padding:18px 20px 32px;-webkit-overflow-scrolling:touch;scroll-behavior:smooth;}
+.modal-body{overflow-y:scroll;overflow-x:hidden;flex:1;padding:18px 20px 32px;-webkit-overflow-scrolling:touch;scroll-behavior:smooth;overscroll-behavior:contain;}
 .modal-body::-webkit-scrollbar{width:5px;}
 .modal-body::-webkit-scrollbar-track{background:transparent;}
 .modal-body::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px;}
@@ -116,7 +116,7 @@ nav{background:var(--nav-bg);border-bottom:1px solid rgba(255,255,255,0.08);back
 .diff-rm{background:rgba(239,68,68,.12);color:#FCA5A5;}
 .dline{font-family:monospace;font-size:.72rem;padding:1px 6px;white-space:pre;display:block;}
 .ph{padding:10px 14px;border-bottom:1px solid var(--border);font-size:.72rem;font-weight:700;color:var(--primary);letter-spacing:.06em;text-transform:uppercase;}
-.scrl{overflow-y:auto;max-height:100%;}
+.scrl{overflow-y:auto;max-height:100%;overscroll-behavior:contain;}
 .scrl::-webkit-scrollbar{width:4px;}
 .scrl::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px;}
 .savings-n{font-size:2.8rem;font-weight:800;color:var(--primary);line-height:1;}
@@ -995,8 +995,10 @@ function app(){return{
   onSSE(msg){
     const{type,data,ts}=msg;
     if(type==='log'){
+      const last=this.logs[this.logs.length-1];
+      if(last && last.service===data.service && last.message===data.message) return;
       this.logs.push({...data,ts});
-      if(this.logs.length>600)this.logs.shift();
+      if(this.logs.length>400)this.logs.shift();
       this.$nextTick(()=>{const el=this.$refs.ls;if(el)el.scrollTop=el.scrollHeight;});
     }else if(type==='kaji_activity'){this.kajiAct.push({...data,ts});
     }else if(type==='kb_hit'){
