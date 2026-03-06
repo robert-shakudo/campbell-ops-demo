@@ -47,10 +47,12 @@ CLICKUP_TOKEN = os.getenv(
     "CLICKUP_TOKEN", "pk_150142682_TO57FJP04N2FUC2QSTYA28PBZL8QGN3V"
 )
 DEMO_URL = os.getenv("DEMO_URL", "https://campbell-ops-demo.dev.hyperplane.dev")
+WEBHOOK_BASE = os.getenv("CAMPBELL_INTERNAL_URL", DEMO_URL)
 N8N_KEY = os.getenv(
     "N8N_API_KEY",
     "",
 )
+N8N_WF3_WEBHOOK = os.getenv("N8N_WF3_WEBHOOK_URL", "")
 
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger("campbell")
@@ -949,6 +951,35 @@ def db_execute(sql: str, params=None, fetch=False):
             conn.commit()
 
 
+def log_audit(
+    event_type: str,
+    details: Dict,
+    service: Optional[str] = None,
+    incident_id: Optional[str] = None,
+    source: str = "system",
+    actor: Optional[str] = None,
+    status: str = "success",
+    duration_ms: Optional[int] = None,
+):
+    try:
+        db_execute(
+            """INSERT INTO campbell_audit(event_type, service, incident_id, source, actor, details, status, duration_ms)
+               VALUES(%s,%s,%s,%s,%s,%s,%s,%s)""",
+            [
+                event_type,
+                service,
+                incident_id,
+                source,
+                actor,
+                json.dumps(details),
+                status,
+                duration_ms,
+            ],
+        )
+    except Exception as e:
+        log.warning(f"Audit log failed: {e}")
+
+
 # ─────────────────────────── SSE broadcast ───────────────────────────
 async def broadcast(event_type: str, data: Dict):
     msg = {"type": event_type, "data": data, "ts": datetime.utcnow().isoformat()}
@@ -1084,7 +1115,30 @@ async def simulate_fix_flow(incident_id: str, service: str):
         service, "[INFO]", f"✅ {service} service restored — all systems operational"
     )
 
-    # Post to Mattermost
+    log_audit(
+        "fix_applied",
+        {
+            "commit": commit,
+            "build": cfg["build_name"],
+            "savings": cfg["impact"],
+            "service": service,
+        },
+        service=service,
+        incident_id=incident_id,
+        source="kaji",
+        status="success",
+    )
+    await broadcast(
+        "audit",
+        {
+            "event_type": "fix_applied",
+            "service": service,
+            "description": f"✅ Fix applied — commit `{commit}` | Build PASSED | ${cfg['impact']:,} saved",
+            "source": "Kaji",
+            "ts": datetime.utcnow().isoformat(),
+        },
+    )
+
     await post_mattermost(
         f"✅ **[{cfg['display']}]** Fix applied — commit `{commit}`\n"
         f"Build: `{cfg['build_name']}` — **PASSED** ✓\n"
@@ -1207,7 +1261,6 @@ async def inject_failure(service: str, bg: BackgroundTasks):
     )
     incident_id = str(dict(row[0])["id"]) if row else None
 
-    # Post alert to Mattermost
     mm_message = (
         f"🚨 **[{cfg['display']}]** `{cfg['error'][:80]}`\n"
         f"Detected at {ts[:16]} UTC | 💰 **${cfg['impact']:,}** at risk"
@@ -1218,6 +1271,22 @@ async def inject_failure(service: str, bg: BackgroundTasks):
             "UPDATE campbell_incidents SET mattermost_thread=%s WHERE id=%s",
             [post_id, incident_id],
         )
+
+    log_audit(
+        "service_failure",
+        {
+            "service": service,
+            "error": cfg["error"],
+            "impact": cfg["impact"],
+            "mattermost_post": post_id,
+            "incident_id": incident_id,
+        },
+        service=service,
+        incident_id=incident_id,
+        source="system",
+        actor="monitoring",
+        status="detected",
+    )
 
     await broadcast(
         "incident_created",
@@ -1230,6 +1299,16 @@ async def inject_failure(service: str, bg: BackgroundTasks):
             "icon": cfg["icon"],
             "ts": ts,
             "mattermost_thread": post_id,
+        },
+    )
+    await broadcast(
+        "audit",
+        {
+            "event_type": "service_failure",
+            "service": service,
+            "description": f"🚨 {cfg['display']} failure detected — ${cfg['impact']:,} at risk",
+            "source": "Monitoring",
+            "ts": ts,
         },
     )
     return {
@@ -1612,8 +1691,8 @@ async def request_review(incident_id: str):
     inc = dict(row[0])
     service = inc["service"]
     cfg = SERVICES_CONFIG.get(service, {})
-    approve_url = f"{DEMO_URL}/api/webhooks/approve/{incident_id}"
-    reject_url = f"{DEMO_URL}/api/webhooks/reject/{incident_id}"
+    approve_url = f"{WEBHOOK_BASE}/api/webhooks/approve/{incident_id}"
+    reject_url = f"{WEBHOOK_BASE}/api/webhooks/reject/{incident_id}"
     diff_text = cfg.get("fix_diff", "no diff available")
     msg_payload: Dict[str, Any] = {
         "channel_id": MM_CHANNEL_ID,
@@ -1748,6 +1827,30 @@ async def webhook_approve(incident_id: str, request: Request, bg: BackgroundTask
     service = inc["service"]
     cfg = SERVICES_CONFIG.get(service, {})
     commit = cfg.get("commit_hash", "auto")
+    log_audit(
+        "mm_button_approve",
+        {
+            "user_name": user_name,
+            "user_id": user_id,
+            "commit": commit,
+            "service": service,
+        },
+        service=service,
+        incident_id=incident_id,
+        source="mattermost",
+        actor=user_name,
+    )
+    await broadcast(
+        "audit",
+        {
+            "event_type": "mm_button_approve",
+            "service": service,
+            "description": f"✅ @{user_name} clicked Approve in Mattermost — applying fix",
+            "source": "Mattermost",
+            "actor": user_name,
+            "ts": datetime.utcnow().isoformat(),
+        },
+    )
     await post_mattermost(
         f"✅ **Fix approved by @{user_name}**\n"
         f"Applying to `{cfg.get('fix_file', '')}` — commit `{commit}` → build starting...\n"
@@ -1756,7 +1859,7 @@ async def webhook_approve(incident_id: str, request: Request, bg: BackgroundTask
     bg.add_task(simulate_fix_flow, incident_id, service)
     return JSONResponse(
         {
-            "ephemeral_text": f"✅ Approved! Fix is being applied. Check #campbell-ops-alerts for build status."
+            "ephemeral_text": "✅ Approved! Fix is being applied. Check #campbell-ops-alerts for build status."
         }
     )
 
@@ -1794,6 +1897,23 @@ async def webhook_reject(incident_id: str, request: Request):
         {
             "tool": "fix_rejected",
             "summary": f"Fix rejected by {user_name} — will retry with alternative approach",
+        },
+    )
+    log_audit(
+        "mm_button_reject",
+        {"user_name": user_name, "incident_id": incident_id},
+        incident_id=incident_id,
+        source="mattermost",
+        actor=user_name,
+    )
+    await broadcast(
+        "audit",
+        {
+            "event_type": "mm_button_reject",
+            "description": f"❌ @{user_name} rejected fix in Mattermost — Kaji will retry",
+            "source": "Mattermost",
+            "actor": user_name,
+            "ts": datetime.utcnow().isoformat(),
         },
     )
     return JSONResponse(
@@ -1942,6 +2062,74 @@ async def post_kaji_activity(data: Dict):
     )
     await broadcast("kaji_activity", {"tool": tool, "summary": summary})
     return {"status": "logged"}
+
+
+@app.get("/api/audit")
+async def get_audit(limit: int = 100, event_type: Optional[str] = None):
+    where = "WHERE 1=1"
+    params: List = []
+    if event_type:
+        where += " AND event_type = %s"
+        params.append(event_type)
+    rows = (
+        db_execute(
+            f"SELECT * FROM campbell_audit {where} ORDER BY timestamp DESC LIMIT %s",
+            params + [limit],
+            fetch=True,
+        )
+        or []
+    )
+    return {"audit": [dict(r) for r in rows], "count": len(rows)}
+
+
+@app.post("/api/audit/log")
+async def post_audit(data: Dict):
+    log_audit(
+        event_type=data.get("event_type", "external"),
+        details=data.get("details", {}),
+        service=data.get("service"),
+        incident_id=data.get("incident_id"),
+        source=data.get("source", "external"),
+        actor=data.get("actor"),
+        status=data.get("status", "success"),
+    )
+    await broadcast(
+        "audit",
+        {
+            "event_type": data.get("event_type"),
+            "source": data.get("source"),
+            "description": data.get("details", {}).get("summary", ""),
+            "ts": datetime.utcnow().isoformat(),
+        },
+    )
+    return {"status": "logged"}
+
+
+@app.post("/api/admin/n8n-config")
+async def set_n8n_config(data: Dict):
+    global N8N_WF3_WEBHOOK
+    wf3_url = data.get("wf3_webhook_url", "")
+    if wf3_url:
+        N8N_WF3_WEBHOOK = wf3_url
+        log_audit("n8n_configured", {"wf3_webhook_url": wf3_url}, source="admin")
+        await broadcast(
+            "audit",
+            {
+                "event_type": "n8n_configured",
+                "description": f"WF3 webhook set: {wf3_url}",
+                "source": "Admin",
+                "ts": datetime.utcnow().isoformat(),
+            },
+        )
+    return {"status": "ok", "wf3_webhook_url": N8N_WF3_WEBHOOK}
+
+
+@app.get("/api/admin/n8n-config")
+async def get_n8n_config():
+    return {
+        "wf3_webhook_url": N8N_WF3_WEBHOOK,
+        "n8n_ui": "https://n8n-v2.dev.hyperplane.dev",
+    }
 
 
 # ─────────────────────────── SSE stream ───────────────────────────

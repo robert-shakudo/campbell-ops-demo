@@ -137,7 +137,7 @@ nav{background:var(--nav-bg);border-bottom:1px solid rgba(255,255,255,0.08);back
 @keyframes fi{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
 </style>
 </head>
-<body x-data="app()" x-init="init()" @keydown.escape.window="modal=null">
+<body x-data="app()" x-init="init()" @keydown.escape.window="closeModal()">
 
 <!-- NAV -->
 <nav>
@@ -152,6 +152,7 @@ nav{background:var(--nav-bg);border-bottom:1px solid rgba(255,255,255,0.08);back
     <div class="flex items-center h-14">
       <button @click="tab='board'" :class="tab==='board'?'on':''" class="tab h-full">📊 Incident Board</button>
       <button @click="tab='feed'"  :class="tab==='feed'?'on':''"  class="tab h-full">📡 Live Feed</button>
+      <button @click="tab='audit'; loadAudit()" :class="tab==='audit'?'on':''" class="tab h-full">🔍 Audit Trail</button>
       <button @click="tab='settings'" :class="tab==='settings'?'on':''" class="tab h-full">⚙️ Settings</button>
     </div>
     <div class="ml-auto flex items-center gap-2">
@@ -168,8 +169,10 @@ nav{background:var(--nav-bg);border-bottom:1px solid rgba(255,255,255,0.08);back
 </nav>
 
 <!-- ═══ MODAL ═══ -->
-<div x-show="modal" @click.self="modal=null" class="modal-overlay" x-transition:enter="transition ease-out duration-150" x-transition:enter-start="opacity-0" x-transition:enter-end="opacity-100">
-  <div class="modal-box" x-show="modal">
+<div x-show="modal" @click.self="closeModal()" class="modal-overlay"
+  x-transition:enter="transition ease-out duration-150" x-transition:enter-start="opacity-0" x-transition:enter-end="opacity-100"
+  x-transition:leave="transition ease-in duration-100" x-transition:leave-start="opacity-100" x-transition:leave-end="opacity-0">
+  <div class="modal-box">
     <div class="modal-hdr">
       <div class="flex items-center gap-3">
         <span x-text="modal?.icon||'⚙️'" class="text-2xl"></span>
@@ -184,7 +187,7 @@ nav{background:var(--nav-bg);border-bottom:1px solid rgba(255,255,255,0.08);back
       </div>
       <div class="flex items-center gap-2">
         <button @click="scanRelated(modal?.id)" class="btn-scan">🔍 Scan Code</button>
-        <button @click="modal=null" class="btn-g text-xs px-3" style="width:auto;">✕ Close</button>
+        <button @click="closeModal()" class="btn-g text-xs px-3" style="width:auto;">✕ Close</button>
       </div>
     </div>
     <div class="modal-body">
@@ -621,6 +624,102 @@ nav{background:var(--nav-bg);border-bottom:1px solid rgba(255,255,255,0.08);back
   </div>
 </div>
 
+<!-- ═══ AUDIT TRAIL ═══ -->
+<div x-show="tab==='audit'" class="max-w-screen-2xl mx-auto px-5 py-5">
+  <div class="flex items-center gap-3 mb-4">
+    <h2 class="text-xl font-bold">🔍 Audit Trail</h2>
+    <span class="text-xs" style="color:var(--muted);">Full system flow log — every event across Kaji, n8n, Mattermost, and the dashboard</span>
+    <div class="ml-auto flex items-center gap-2">
+      <div class="flex gap-1">
+        <template x-for="f in auditFilters" :key="f.val">
+          <button @click="auditFilter=f.val; filterAudit()" :class="auditFilter===f.val?'!border-primary':''" class="btn-g text-xs" style="width:auto;padding:4px 10px;" x-text="f.label"></button>
+        </template>
+      </div>
+      <button @click="loadAudit()" class="btn-g text-xs" style="width:auto;padding:4px 10px;">↻ Refresh</button>
+      <button @click="exportCsv()" class="btn-g text-xs" style="width:auto;padding:4px 10px;">⬇ Export CSV</button>
+    </div>
+  </div>
+
+  <!-- N8N WORKFLOWS STATUS BAR -->
+  <div class="panel p-4 mb-4">
+    <div class="text-xs font-bold tracking-wider mb-3" style="color:var(--muted);">N8N WORKFLOW STATUS</div>
+    <div class="flex flex-wrap gap-3">
+      <a href="https://n8n-v2.dev.hyperplane.dev/workflow/KIH7OOjiQyT70U0a" target="_blank" class="flex items-center gap-2 px-3 py-2 rounded-lg text-xs hover:opacity-80 transition-opacity" style="background:rgba(34,197,94,0.08);border:1px solid rgba(34,197,94,0.25);text-decoration:none;">
+        <span class="pulse" style="color:var(--green);">●</span>
+        <div>
+          <div class="font-semibold" style="color:var(--green);">WF1 — Log Watcher</div>
+          <div style="color:var(--muted);">Every 5 min · Polls /api/logs/all/latest-errors</div>
+        </div>
+      </a>
+      <a href="https://n8n-v2.dev.hyperplane.dev/workflow/MfDXmx5ke89Wq9G7" target="_blank" class="flex items-center gap-2 px-3 py-2 rounded-lg text-xs hover:opacity-80 transition-opacity" style="background:rgba(34,197,94,0.08);border:1px solid rgba(34,197,94,0.25);text-decoration:none;">
+        <span class="pulse" style="color:var(--green);">●</span>
+        <div>
+          <div class="font-semibold" style="color:var(--green);">WF2 — Daily Digest</div>
+          <div style="color:var(--muted);">9am UTC daily · 24h ops summary to Mattermost</div>
+        </div>
+      </a>
+      <a href="https://n8n-v2.dev.hyperplane.dev/workflow/2amtYmCzCyYT4sFo" target="_blank" class="flex items-center gap-2 px-3 py-2 rounded-lg text-xs hover:opacity-80 transition-opacity" style="background:rgba(34,197,94,0.08);border:1px solid rgba(34,197,94,0.25);text-decoration:none;">
+        <span class="pulse" style="color:var(--green);">●</span>
+        <div>
+          <div class="font-semibold" style="color:var(--green);">WF3 — Code Review</div>
+          <div style="color:var(--muted);">Webhook · Human-in-the-loop approval flow</div>
+        </div>
+      </a>
+    </div>
+  </div>
+
+  <!-- UNIFIED TIMELINE -->
+  <div class="panel flex flex-col" style="height:calc(100vh - 280px);">
+    <div class="ph flex items-center gap-3">
+      AUDIT TIMELINE
+      <span class="font-normal text-xs" style="color:var(--muted);" x-text="filteredAudit.length+' events'"></span>
+      <span class="ml-auto pulse text-xs" style="color:var(--green);">● Live</span>
+    </div>
+    <div class="flex-1 overflow-y-auto p-4 scrl" x-ref="auditScroll">
+      <div x-show="filteredAudit.length===0" class="text-center py-12 text-sm" style="color:var(--muted);">
+        No audit events yet. Inject a failure and run through the demo flow to populate this timeline.
+      </div>
+      <template x-for="(entry, i) in filteredAudit" :key="entry.id||i">
+        <div class="flex gap-3 mb-4 fi">
+          <!-- Timeline line -->
+          <div class="flex flex-col items-center">
+            <div class="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 text-sm"
+              :style="auditBadgeStyle(entry.event_type||entry.type)">
+              <span x-text="auditIcon(entry.event_type||entry.type)"></span>
+            </div>
+            <div class="flex-1 w-px mt-1" style="background:var(--border);min-height:20px;" x-show="i < filteredAudit.length-1"></div>
+          </div>
+          <!-- Entry content -->
+          <div class="flex-1 pb-4">
+            <div class="flex items-start justify-between gap-2">
+              <div class="flex items-center gap-2 flex-wrap">
+                <span class="badge text-xs" :style="auditBadgeStyle(entry.event_type||entry.type)" x-text="auditLabel(entry.event_type||entry.type)"></span>
+                <span class="font-semibold text-sm" x-text="entry.description || entry.summary || (entry.details?.summary) || entry.action || entry.event_type"></span>
+                <span x-show="entry.actor || entry.source" class="text-xs" style="color:var(--muted);">
+                  from <span x-text="entry.actor||entry.source"></span>
+                </span>
+              </div>
+              <span class="text-xs flex-shrink-0" style="color:var(--muted);" x-text="ft(entry.timestamp||entry.ts)"></span>
+            </div>
+            <!-- Service badge -->
+            <div x-show="entry.service" class="mt-1">
+              <span class="text-xs px-2 py-0.5 rounded mono" style="background:var(--surface-2);color:var(--text-2);" x-text="entry.service"></span>
+              <span x-show="entry.incident_id" class="text-xs ml-1 px-2 py-0.5 rounded mono" style="background:var(--surface-2);color:var(--muted);" x-text="'incident:'+entry.incident_id?.substring(0,8)+'...'"></span>
+            </div>
+            <!-- Details expandable -->
+            <div x-show="entry.details && Object.keys(entry.details||{}).length">
+              <button @click="entry._open=!entry._open" class="text-xs mt-1" style="color:var(--primary);cursor:pointer;">
+                <span x-text="entry._open?'▲ Hide details':'▼ Show details'"></span>
+              </button>
+              <div x-show="entry._open" class="mt-2 p-3 rounded-lg mono text-xs leading-relaxed" style="background:var(--surface-2);color:var(--text-2);max-height:150px;overflow-y:auto;white-space:pre-wrap;" x-text="JSON.stringify(entry.details||{}, null, 2)"></div>
+            </div>
+          </div>
+        </div>
+      </template>
+    </div>
+  </div>
+</div>
+
 <!-- ═══ SETTINGS ═══ -->
 <div x-show="tab==='settings'" class="max-w-4xl mx-auto px-5 py-8">
   <div class="mb-6"><h2 class="text-2xl font-bold mb-2">⚙️ Connect Your Systems</h2><p class="text-sm" style="color:var(--text-2);">Every field here maps directly to your actual Campbell infrastructure. Same Kaji, real data, days not weeks.</p></div>
@@ -704,6 +803,16 @@ function app(){return{
   buildSteps:{},diagnoseSteps:{},scanResults:{},
   savings:0,resCnt:0,bumped:false,logFlt:'',connStatus:{},theme:'light',
   simMode:true,simulatingRandom:false,lastAiReason:'',
+  auditEntries:[],filteredAudit:[],auditFilter:'all',
+  auditFilters:[
+    {val:'all',label:'All'},
+    {val:'service_failure',label:'Failures'},
+    {val:'kaji',label:'Kaji'},
+    {val:'mattermost',label:'Mattermost'},
+    {val:'fix_applied',label:'Fixes'},
+    {val:'n8n',label:'n8n'},
+    {val:'external',label:'External'},
+  ],
   settings:{
     airflow:{url:'',username:'',password:''},
     confluence:{url:'',space:'',token:''},
@@ -766,8 +875,14 @@ function app(){return{
   setTheme(t){this.theme=t;document.documentElement.dataset.theme=t;localStorage.setItem('campbellTheme',t);},
 
   openModal(inc){
-    const prev=this.modal;
-    this.modal={...inc,_st:prev?._s||false,_s:prev?._s||false};
+    if(this.modal && this.modal.id===inc.id) return;
+    this.modal={...inc,_st:false,_s:false};
+    document.body.style.overflow='hidden';
+  },
+
+  closeModal(){
+    this.closeModal();
+    document.body.style.overflow='';
   },
 
   statusBadgeClass(s){
@@ -795,7 +910,11 @@ function app(){return{
       this.resCnt=this.incidents.filter(i=>i.status==='resolved').length;
       if(this.modal){
         const up=this.incidents.find(i=>i.id===this.modal.id);
-        if(up){this.modal={...up,_st:this.modal._st,_s:this.modal._s};}
+        if(up){
+          const _st=this.modal._st, _s=this.modal._s;
+          Object.assign(this.modal, up);
+          this.modal._st=_st; this.modal._s=_s;
+        }
       }
     }catch(_){}
   },
@@ -835,9 +954,14 @@ function app(){return{
       this.savings+=(data.savings||0);this.bumped=true;setTimeout(()=>this.bumped=false,700);
       this.loadIncidents();this.loadHealth();
     }else if(type==='ticket_created'){this.loadIncidents();
+    }else if(type==='audit'){
+      this.auditEntries.unshift({...data,timestamp:ts,_open:false});
+      if(this.auditEntries.length>300)this.auditEntries.pop();
+      this.filterAudit();
     }else if(type==='demo_reset'){
       this.incidents=[];this.logs=[];this.kajiAct=[];this.kbHits=[];this.histRefs=[];
       this.buildSteps={};this.diagnoseSteps={};this.savings=0;this.resCnt=0;this.scanFeed=[];this.scanResults={};
+      this.auditEntries=[];this.filteredAudit=[];
       this.loadHealth();
     }
   },
@@ -869,7 +993,7 @@ function app(){return{
     if(!id)return;
     try{const r=await fetch('/api/incidents/'+id+'/scan-related',{method:'POST'});const d=await r.json();
     this.scanResults[id]=d.related_issues||[];
-    if(this.modal?.id===id)this.modal={...this.modal,related_issues:d.related_issues};
+    if(this.modal?.id===id)if(this.modal){Object.assign(this.modal, {related_issues:d.related_issues});}
     }catch(_){}
   },
   async resetDemo(){if(!confirm('Reset all incidents?'))return;await fetch('/api/demo/reset',{method:'POST'});},
@@ -893,6 +1017,75 @@ function app(){return{
   },
   ft(ts){if(!ts)return'';try{return new Date(ts).toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',second:'2-digit'});}catch(_){return(ts||'').substring(11,19);}},
   cl(lvl){return(lvl||'').replace('[','').replace(']','').trim();},
+
+  async loadAudit(){
+    try{
+      const r=await fetch('/api/audit?limit=200');
+      const d=await r.json();
+      const kajiR=await fetch('/api/kaji-activity');
+      const kajiD=await kajiR.json();
+      const kajiMapped=(kajiD.activity||[]).map(a=>({...a,event_type:'kaji',description:a.summary,source:'Kaji',details:a.params}));
+      const merged=[...(d.audit||[]),...kajiMapped].sort((a,b)=>new Date(b.timestamp||b.ts)-new Date(a.timestamp||a.ts));
+      this.auditEntries=merged;
+      this.filterAudit();
+    }catch(_){}
+  },
+
+  filterAudit(){
+    if(this.auditFilter==='all'){this.filteredAudit=this.auditEntries;return;}
+    this.filteredAudit=this.auditEntries.filter(e=>{
+      const t=e.event_type||e.type||'';
+      if(this.auditFilter==='kaji') return t==='kaji'||t.includes('kaji')||t.includes('diagnos')||t.includes('fix_')||t==='apply_code_fix';
+      if(this.auditFilter==='mattermost') return t.includes('mm_')||t.includes('mattermost')||t==='request_human_review';
+      if(this.auditFilter==='n8n') return t.includes('n8n');
+      if(this.auditFilter==='external') return t.includes('external')||t.includes('confluence')||t.includes('clickup');
+      return t===this.auditFilter;
+    });
+  },
+
+  auditIcon(t){
+    const m={service_failure:'🚨',fix_applied:'✅',mm_button_approve:'✅',mm_button_reject:'❌',diagnose_complete:'🔍',request_human_review:'👀',create_clickup_ticket:'🎫',ticket_created:'🎫',n8n_configured:'⚙️',simulate_random:'🎲',demo_reset:'↺',kaji:'🤖',apply_code_fix:'🔧',search_confluence:'📚',read_logs:'📋',generate_patch:'✏️',read_source_file:'📄',search_incident_history:'🕰',external:'🌐',system:'⚙️'};
+    for(const k of Object.keys(m)){if(t&&t.includes(k))return m[k];}
+    return '📌';
+  },
+
+  auditLabel(t){
+    if(!t)return 'EVENT';
+    if(t.includes('mm_button')||t.includes('mattermost'))return 'MATTERMOST';
+    if(t.includes('n8n'))return 'N8N';
+    if(t==='service_failure')return 'FAILURE';
+    if(t==='fix_applied')return 'FIX';
+    if(t==='kaji'||t.includes('diagnos')||t.includes('search')||t.includes('read'))return 'KAJI';
+    if(t.includes('ticket')||t.includes('clickup'))return 'CLICKUP';
+    if(t==='simulate_random')return 'SIMULATE';
+    return t.replace(/_/g,' ').toUpperCase().substring(0,12);
+  },
+
+  auditBadgeStyle(t){
+    if(t&&(t.includes('mm_button')||t.includes('mattermost')))return 'background:rgba(59,130,246,0.15);color:#93C5FD;';
+    if(t&&t.includes('n8n'))return 'background:rgba(245,158,11,0.15);color:#FDE68A;';
+    if(t==='service_failure')return 'background:rgba(239,68,68,0.15);color:#FCA5A5;';
+    if(t==='fix_applied'||t==='mm_button_approve')return 'background:rgba(34,197,94,0.15);color:#86EFAC;';
+    if(t&&(t==='kaji'||t.includes('diagnos')||t.includes('search')||t.includes('read')||t.includes('generate')))return 'background:rgba(148,150,252,0.15);color:#C4B5FD;';
+    if(t&&(t.includes('ticket')||t.includes('clickup')))return 'background:rgba(251,146,60,0.15);color:#FED7AA;';
+    return 'background:var(--surface-2);color:var(--text-2);';
+  },
+
+  exportCsv(){
+    const rows=[['timestamp','event_type','description','service','actor','source','incident_id']];
+    for(const e of this.filteredAudit){
+      rows.push([
+        e.timestamp||e.ts||'',e.event_type||e.type||'',
+        (e.description||e.summary||'').replace(/,/g,';'),
+        e.service||'',e.actor||'',e.source||'',e.incident_id||''
+      ]);
+    }
+    const csv=rows.map(r=>r.join(',')).join('\n');
+    const a=document.createElement('a');
+    a.href='data:text/csv;charset=utf-8,'+encodeURIComponent(csv);
+    a.download='campbell-audit-'+new Date().toISOString().slice(0,10)+'.csv';
+    a.click();
+  },
 };}
 </script>
 </body>
