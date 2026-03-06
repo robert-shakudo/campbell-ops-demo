@@ -93,11 +93,13 @@ nav{background:var(--nav-bg);border-bottom:1px solid rgba(255,255,255,0.08);back
 .conn-btn{font-size:.75rem;padding:7px 14px;border-radius:6px;font-weight:600;background:var(--surface-2);border:1px solid var(--border);color:var(--muted);cursor:pointer;transition:all .15s;}
 .conn-btn:hover{border-color:var(--primary);color:var(--primary);}
 .modal-overlay{position:fixed;inset:0;z-index:60;display:flex;align-items:center;justify-content:center;padding:24px;background:rgba(0,0,0,0.65);}
-.modal-box{background:var(--surface);border:1px solid var(--border);border-radius:14px;width:100%;max-width:920px;max-height:92vh;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 24px 80px var(--shadow-lg);will-change:transform;transform:translateZ(0);}
-.modal-hdr{padding:16px 22px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-shrink:0;}
-.modal-body{overflow-y:auto;flex:1;padding:22px;}
-.modal-body::-webkit-scrollbar{width:4px;}
-.modal-body::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px;}
+.modal-box{background:var(--surface);border:1px solid var(--border);border-radius:14px;width:100%;max-width:960px;max-height:95vh;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 24px 80px var(--shadow-lg);will-change:transform;transform:translateZ(0);}
+.modal-hdr{padding:14px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-shrink:0;}
+.modal-body{overflow-y:scroll;overflow-x:hidden;flex:1;padding:18px 20px 32px;-webkit-overflow-scrolling:touch;scroll-behavior:smooth;}
+.modal-body::-webkit-scrollbar{width:5px;}
+.modal-body::-webkit-scrollbar-track{background:transparent;}
+.modal-body::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px;}
+.modal-body::-webkit-scrollbar-thumb:hover{background:var(--muted);}
 .mono{font-family:'JetBrains Mono','Fira Code',monospace;font-size:.74rem;}
 .dr{display:flex;gap:6px;align-items:flex-start;padding:2px 0;font-size:.72rem;}
 .dl{color:var(--muted);min-width:84px;flex-shrink:0;font-weight:600;}
@@ -192,7 +194,7 @@ nav{background:var(--nav-bg);border-bottom:1px solid rgba(255,255,255,0.08);back
       </div>
     </div>
     <div class="modal-body">
-      <div class="grid grid-cols-2 gap-5">
+      <div class="grid gap-5" style="grid-template-columns:1fr 1fr;min-width:0;">
         <!-- LEFT -->
         <div class="flex flex-col gap-4">
           <!-- Error -->
@@ -352,17 +354,37 @@ nav{background:var(--nav-bg);border-bottom:1px solid rgba(255,255,255,0.08);back
             </a>
           </div>
           <!-- Related issues -->
-          <div x-show="(scanResults[modal?.id]||modal?.related_issues||[]).length">
-            <div class="text-xs font-bold mb-1.5" style="color:var(--muted);">RELATED ISSUES</div>
-            <div class="space-y-1.5">
-              <template x-for="(r,j) in (scanResults[modal?.id]||modal?.related_issues||[])" :key="j">
-                <a :href="r.url" target="_blank" class="flex items-center justify-between p-2 rounded text-xs hover:opacity-80 transition-opacity" style="background:var(--surface-2);text-decoration:none;">
-                  <div><span class="mono font-bold" style="color:var(--primary);" x-text="r.id"></span><span class="ml-2" style="color:var(--text-2);" x-text="r.title?.substring(0,45)+'...'"></span></div>
-                  <span :class="'jbadge '+(r.status==='Closed'||r.status==='Done'?'closed':r.status==='In Progress'?'inprog':'open')" x-text="r.status"></span>
-                </a>
-              </template>
-            </div>
-          </div>
+           <div x-show="(scanResults[modal?.id]||modal?.related_issues||[]).length">
+             <div class="text-xs font-bold mb-1.5" style="color:var(--muted);">RELATED ISSUES</div>
+             <div class="space-y-1.5">
+               <template x-for="(r,j) in (scanResults[modal?.id]||modal?.related_issues||[])" :key="j">
+                 <a :href="r.url" target="_blank" class="flex items-center justify-between p-2 rounded text-xs hover:opacity-80 transition-opacity" style="background:var(--surface-2);text-decoration:none;">
+                   <div><span class="mono font-bold" style="color:var(--primary);" x-text="r.id"></span><span class="ml-2" style="color:var(--text-2);" x-text="r.title?.substring(0,45)+'...'"></span></div>
+                   <span :class="'jbadge '+(r.status==='Closed'||r.status==='Done'?'closed':r.status==='In Progress'?'inprog':'open')" x-text="r.status"></span>
+                 </a>
+               </template>
+             </div>
+           </div>
+         </div>
+       </div>
+
+      <!-- KB CROSS-REFERENCE (full width below grid) -->
+      <div x-show="modalKbHits[modal?.id]?.length" class="mt-4 pt-4" style="border-top:1px solid var(--border);">
+        <div class="text-xs font-bold mb-2" style="color:var(--muted);">🌐 PUBLIC KB CROSS-REFERENCES</div>
+        <div class="grid grid-cols-2 gap-2" style="min-width:0;">
+          <template x-for="(h,i) in (modalKbHits[modal?.id]||[])" :key="i">
+            <a :href="h.url||'#'" target="_blank" class="flex items-start gap-2 p-2 rounded hover:opacity-80 transition-opacity" style="background:var(--surface-2);text-decoration:none;min-width:0;">
+              <span class="text-xs px-1.5 py-0.5 rounded font-bold flex-shrink-0 mt-0.5"
+                :style="h.space==='STACK OVERFLOW'?'background:rgba(251,146,60,0.12);color:var(--orange)':
+                        h.space==='WIKIPEDIA'?'background:rgba(59,130,246,0.12);color:var(--blue)':
+                        'background:rgba(148,150,252,0.12);color:var(--secondary)'"
+                x-text="h.space==='STACK OVERFLOW'?'SO':h.space==='WIKIPEDIA'?'WIKI':'CONF'"></span>
+              <div class="min-w-0">
+                <div class="text-xs font-medium truncate" style="color:var(--text-2);" x-text="h.title"></div>
+                <div x-show="h.answers" class="text-xs mt-0.5" style="color:var(--muted);" x-text="h.answers+' answers'"></div>
+              </div>
+            </a>
+          </template>
         </div>
       </div>
 
@@ -596,7 +618,9 @@ nav{background:var(--nav-bg);border-bottom:1px solid rgba(255,255,255,0.08);back
            <template x-for="(h,i) in kbHits.slice(-15).reverse()" :key="i">
              <div class="kbhit mb-2">
                <div class="flex items-center gap-2">
-                 <span class="text-xs px-1.5 py-0.5 rounded font-bold" :style="h.space==='WIKIPEDIA'?'background:rgba(59,130,246,0.12);color:var(--blue)':'background:rgba(148,150,252,0.12);color:var(--secondary)'" x-text="h.space==='WIKIPEDIA'?'🌐 WIKI':'📖 CONF'"></span>
+                  <span class="text-xs px-1.5 py-0.5 rounded font-bold flex-shrink-0"
+                    :style="h.space==='WIKIPEDIA'?'background:rgba(59,130,246,0.12);color:var(--blue)':h.space==='STACK OVERFLOW'?'background:rgba(251,146,60,0.12);color:var(--orange)':'background:rgba(148,150,252,0.12);color:var(--secondary)'"
+                    x-text="h.space==='WIKIPEDIA'?'🌐 WIKI':h.space==='STACK OVERFLOW'?'💬 SO':'📖 CONF'"></span>
                  <span class="text-xs font-semibold" style="color:var(--text-2);" x-text="h.title"></span>
                </div>
                <div class="text-xs" style="color:var(--muted);" x-text="h.space+' · '+ft(h.ts)"></div>
@@ -767,6 +791,31 @@ nav{background:var(--nav-bg);border-bottom:1px solid rgba(255,255,255,0.08);back
     </div>
   </div>
 
+  <!-- KB SOURCES -->
+  <div class="panel p-5 mb-5">
+    <div class="flex items-center gap-3 mb-2">
+      <span class="text-2xl">🌐</span>
+      <div>
+        <h3 class="font-bold text-lg">Knowledge Base Sources</h3>
+        <p class="text-xs" style="color:var(--muted);">Where Kaji searches during diagnosis. Active sources show in the Live Feed KB panel and in each incident's cross-references.</p>
+      </div>
+    </div>
+    <div class="flex gap-2 flex-wrap mt-3">
+      <button @click="toggleKbSource('wikipedia')" :class="kbSources.includes('wikipedia')?'active':''" class="theme-btn flex items-center gap-2 px-3 py-2" style="border-radius:8px;">
+        <span>🌐</span><div class="text-left"><div class="font-bold text-xs">Wikipedia</div><div class="text-xs opacity-70">Free · No key · Default in SIM mode</div></div>
+      </button>
+      <button @click="toggleKbSource('stackoverflow')" :class="kbSources.includes('stackoverflow')?'active':''" class="theme-btn flex items-center gap-2 px-3 py-2" style="border-radius:8px;">
+        <span>💬</span><div class="text-left"><div class="font-bold text-xs">Stack Overflow</div><div class="text-xs opacity-70">Free · Technical Q&A · Error patterns</div></div>
+      </button>
+      <button @click="toggleKbSource('confluence')" :class="kbSources.includes('confluence')?'active':''" class="theme-btn flex items-center gap-2 px-3 py-2" style="border-radius:8px;">
+        <span>📖</span><div class="text-left"><div class="font-bold text-xs">Confluence</div><div class="text-xs opacity-70">Internal KB · Requires credentials in Live mode</div></div>
+      </button>
+    </div>
+    <div class="mt-3 text-xs p-2 rounded" style="background:var(--surface-2);color:var(--muted);">
+      Active: <span class="font-semibold" style="color:var(--primary);" x-text="kbSources.join(', ') || 'none'"></span>
+    </div>
+  </div>
+
   <!-- THEME -->
   <div class="panel p-5 mb-5">
     <div class="flex items-center gap-3 mb-4"><span class="text-2xl">🎨</span><h3 class="font-bold text-lg">Dashboard Theme</h3></div>
@@ -804,7 +853,8 @@ function app(){return{
     'price-feed':     {display:'Data Quality (Price Feed)',      icon:'📊', impact:60000},
   },
   logs:[],kajiAct:[],kbHits:[],histRefs:[],histData:[],scanFeed:[],
-  buildSteps:{},diagnoseSteps:{},scanResults:{},
+  buildSteps:{},diagnoseSteps:{},scanResults:{},modalKbHits:{},
+  kbSources:['wikipedia','stackoverflow','confluence'],
   savings:0,resCnt:0,bumped:false,logFlt:'',connStatus:{},theme:'light',
   simMode:true,simulatingRandom:false,lastAiReason:'',
   auditEntries:[],filteredAudit:[],auditFilter:'all',
@@ -868,6 +918,8 @@ function app(){return{
     this.setTheme(saved);
     const savedMode=localStorage.getItem('campbellSimMode');
     this.simMode = savedMode === null ? true : savedMode === '1';
+    const savedKb=localStorage.getItem('campbellKbSources');
+    if(savedKb){try{this.kbSources=JSON.parse(savedKb);}catch(_){}};
     await this.loadHealth();
     await this.loadIncidents();
     await this.loadHistory();
@@ -947,7 +999,12 @@ function app(){return{
       if(this.logs.length>600)this.logs.shift();
       this.$nextTick(()=>{const el=this.$refs.ls;if(el)el.scrollTop=el.scrollHeight;});
     }else if(type==='kaji_activity'){this.kajiAct.push({...data,ts});
-    }else if(type==='kb_hit'){this.kbHits.push({...data,ts});
+    }else if(type==='kb_hit'){
+      this.kbHits.push({...data,ts});
+      if(this.modal){
+        const list=this.modalKbHits[this.modal.id]||[];
+        this.modalKbHits={...this.modalKbHits,[this.modal.id]:[...list,{...data,ts}]};
+      }
     }else if(type==='incident_history_hit'){this.histRefs.push({ids:data.results,query:data.query,ts});
     }else if(type==='feed_scan'){this.scanFeed.push({...data,ts});this.scanResults[data.incident_id]=data.related||[];
     }else if(type==='diagnosis_step'){
@@ -972,7 +1029,7 @@ function app(){return{
     }else if(type==='demo_reset'){
       this.incidents=[];this.logs=[];this.kajiAct=[];this.kbHits=[];this.histRefs=[];
       this.buildSteps={};this.diagnoseSteps={};this.savings=0;this.resCnt=0;this.scanFeed=[];this.scanResults={};
-      this.auditEntries=[];this.filteredAudit=[];
+      this.auditEntries=[];this.filteredAudit=[];this.modalKbHits={};
       this.loadHealth();
     }
   },
@@ -981,6 +1038,11 @@ function app(){return{
   get fLogs(){return this.logFlt?this.logs.filter(e=>e.service===this.logFlt):this.logs;},
 
   setSimMode(v){this.simMode=v;localStorage.setItem('campbellSimMode',v?'1':'0');},
+  toggleKbSource(s){
+    if(this.kbSources.includes(s))this.kbSources=this.kbSources.filter(x=>x!==s);
+    else this.kbSources=[...this.kbSources,s];
+    localStorage.setItem('campbellKbSources',JSON.stringify(this.kbSources));
+  },
   async simulateRandom(){
     if(this.simulatingRandom)return;
     this.simulatingRandom=true;this.lastAiReason='';

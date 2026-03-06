@@ -1472,6 +1472,78 @@ async def get_wiki_article(title: str):
     raise HTTPException(404, f"Article not found: {title}")
 
 
+SO_QUERIES: Dict[str, str] = {
+    "airflow": "python KeyError dictionary access data pipeline",
+    "bloomberg": "python socket connection timeout retry error",
+    "teamcity": "pytest AssertionError expected type mismatch dictionary",
+    "risk-calculator": "java NullPointerException list check null safety",
+    "price-feed": "python data validation outlier threshold detection",
+}
+
+
+@app.get("/api/public-kb/stackoverflow")
+async def stackoverflow_search(q: str = "", service: Optional[str] = None):
+    query = q or SO_QUERIES.get(service or "", "python error exception handling")
+    results = []
+    try:
+        async with httpx.AsyncClient(timeout=8) as client:
+            r = await client.get(
+                "https://api.stackexchange.com/2.3/search/advanced",
+                params={
+                    "q": query,
+                    "site": "stackoverflow",
+                    "pagesize": 3,
+                    "order": "desc",
+                    "sort": "relevance",
+                },
+            )
+            if r.status_code == 200:
+                for item in r.json().get("items", []):
+                    results.append(
+                        {
+                            "title": item.get("title", ""),
+                            "url": item.get("link", ""),
+                            "score": item.get("score", 0),
+                            "answers": item.get("answer_count", 0),
+                            "is_answered": item.get("is_answered", False),
+                            "tags": item.get("tags", [])[:4],
+                            "source": "Stack Overflow",
+                        }
+                    )
+    except Exception as e:
+        log.warning(f"SO search failed: {e}")
+    db_execute(
+        "INSERT INTO campbell_kaji_activity(tool, params, summary) VALUES(%s,%s,%s)",
+        [
+            "search_stackoverflow",
+            json.dumps({"query": query}),
+            f"Stack Overflow: '{query}' → {len(results)} results",
+        ],
+    )
+    await broadcast(
+        "kaji_activity",
+        {
+            "tool": "search_stackoverflow",
+            "summary": f"Stack Overflow: '{query}' → {len(results)} results",
+        },
+    )
+    for r_item in results[:2]:
+        await broadcast(
+            "kb_hit",
+            {
+                "page_id": f"so-{r_item['score']}",
+                "title": r_item["title"],
+                "space": "STACK OVERFLOW",
+            },
+        )
+    return {
+        "query": query,
+        "results": results,
+        "source": "Stack Overflow",
+        "count": len(results),
+    }
+
+
 @app.get("/api/confluence/search")
 async def confluence_search(q: str = ""):
     results = []
@@ -1779,6 +1851,43 @@ async def simulate_diagnosis_flow(incident_id: str, service: str):
                     )
     except Exception as e:
         log.warning(f"Wikipedia step failed: {e}")
+
+    await asyncio.sleep(0.8)
+    so_q = SO_QUERIES.get(service, "python error exception handling")
+    emit_step(f"💬 Checking Stack Overflow: '{so_q[:50]}'...", "search_stackoverflow")
+    try:
+        async with httpx.AsyncClient(timeout=6) as client:
+            so_r = await client.get(
+                "https://api.stackexchange.com/2.3/search/advanced",
+                params={
+                    "q": so_q,
+                    "site": "stackoverflow",
+                    "pagesize": 2,
+                    "order": "desc",
+                    "sort": "relevance",
+                },
+            )
+            if so_r.status_code == 200:
+                for item in so_r.json().get("items", []):
+                    await broadcast(
+                        "kb_hit",
+                        {
+                            "page_id": f"so-{item.get('question_id')}",
+                            "title": item.get("title", "")[:80],
+                            "space": "STACK OVERFLOW",
+                            "url": item.get("link", ""),
+                            "answers": item.get("answer_count", 0),
+                        },
+                    )
+                    await broadcast(
+                        "kaji_activity",
+                        {
+                            "tool": "search_stackoverflow",
+                            "summary": f"SO: {item.get('title', '')[:70]}",
+                        },
+                    )
+    except Exception as e:
+        log.warning(f"SO step failed: {e}")
     await asyncio.sleep(1)
 
     hist = cfg.get("historical_incident", "")
